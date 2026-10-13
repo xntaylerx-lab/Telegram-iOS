@@ -25,6 +25,9 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     /// Fraction of the straight-ish ends of each corner curve left out of the marks.
     private static let markTrim: CGFloat = 0.35
     private static let markWidth: CGFloat = 3.0
+    /// The media editor's crop tool dims with black at 0.45; the passive highlight is denser, since there is no outline to carry the contrast.
+    private static let editableDimAlpha: CGFloat = 0.4
+    private static let highlightDimAlpha: CGFloat = 0.65
     
     private enum DragMode {
         case move
@@ -55,7 +58,7 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         super.init()
         
         self.dimLayer.fillRule = .evenOdd
-        self.dimLayer.fillColor = UIColor(white: 0.0, alpha: 0.4).cgColor
+        self.dimLayer.fillColor = UIColor(white: 0.0, alpha: mode == .editable ? VisualQuoteFrameNode.editableDimAlpha : VisualQuoteFrameNode.highlightDimAlpha).cgColor
         self.layer.addSublayer(self.dimLayer)
         
         guard case .editable = mode else {
