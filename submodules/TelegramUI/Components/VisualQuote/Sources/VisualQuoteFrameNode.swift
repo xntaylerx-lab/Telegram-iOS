@@ -10,8 +10,11 @@ import AsyncDisplayKit
 public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDelegate {
     private static let minimumSide: CGFloat = 44.0
     private static let handleHitRadius: CGFloat = 38.0
-    private static let bracketLength: CGFloat = 22.0
-    private static let bracketWidth: CGFloat = 3.0
+    private static let cornerRadius: CGFloat = 16.0
+    private static let cornerSmoothing: CGFloat = 0.6
+    private static let markOffset: CGFloat = 6.0
+    private static let markSweep: CGFloat = 50.0
+    private static let markWidth: CGFloat = 2.5
     
     private enum DragMode {
         case move
@@ -41,19 +44,18 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         super.init()
         
         self.dimLayer.fillRule = .evenOdd
-        self.dimLayer.fillColor = UIColor(white: 0.0, alpha: 0.45).cgColor
+        self.dimLayer.fillColor = UIColor(white: 0.0, alpha: 0.4).cgColor
         self.layer.addSublayer(self.dimLayer)
         
         self.borderLayer.fillColor = nil
-        self.borderLayer.strokeColor = UIColor(white: 1.0, alpha: 0.7).cgColor
-        self.borderLayer.lineWidth = 1.0
+        self.borderLayer.strokeColor = UIColor(white: 1.0, alpha: 0.85).cgColor
+        self.borderLayer.lineWidth = 1.5
         self.layer.addSublayer(self.borderLayer)
         
         self.bracketsLayer.fillColor = nil
         self.bracketsLayer.strokeColor = UIColor.white.cgColor
-        self.bracketsLayer.lineWidth = VisualQuoteFrameNode.bracketWidth
+        self.bracketsLayer.lineWidth = VisualQuoteFrameNode.markWidth
         self.bracketsLayer.lineCap = .round
-        self.bracketsLayer.lineJoin = .round
         self.layer.addSublayer(self.bracketsLayer)
     }
     
@@ -113,11 +115,12 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         let previousPaths = (self.dimLayer.path, self.borderLayer.path, self.bracketsLayer.path)
         self.frameRect = rect
         
+        let shape = smoothRoundedRectPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, smoothing: VisualQuoteFrameNode.cornerSmoothing)
         let dimPath = UIBezierPath(rect: self.imageFrame)
-        dimPath.append(UIBezierPath(rect: rect))
+        dimPath.append(UIBezierPath(cgPath: shape))
         self.dimLayer.path = dimPath.cgPath
-        self.borderLayer.path = UIBezierPath(rect: rect).cgPath
-        self.bracketsLayer.path = VisualQuoteFrameNode.bracketsPath(for: rect)
+        self.borderLayer.path = shape
+        self.bracketsLayer.path = cornerMarksPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, offset: VisualQuoteFrameNode.markOffset, sweep: VisualQuoteFrameNode.markSweep)
         
         if animated, let dimFrom = previousPaths.0, let borderFrom = previousPaths.1, let bracketsFrom = previousPaths.2 {
             let timing = CAMediaTimingFunctionName.easeInEaseOut.rawValue
@@ -125,25 +128,6 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
             self.borderLayer.animate(from: borderFrom, to: self.borderLayer.path!, keyPath: "path", timingFunction: timing, duration: 0.3)
             self.bracketsLayer.animate(from: bracketsFrom, to: self.bracketsLayer.path!, keyPath: "path", timingFunction: timing, duration: 0.3)
         }
-    }
-    
-    private static func bracketsPath(for rect: CGRect) -> CGPath {
-        let path = UIBezierPath()
-        let length = min(self.bracketLength, min(rect.width, rect.height) / 2.0 - 2.0)
-        let inset = -self.bracketWidth / 2.0 - 0.5
-        let outer = rect.insetBy(dx: inset, dy: inset)
-        let corners: [(CGPoint, CGFloat, CGFloat)] = [
-            (CGPoint(x: outer.minX, y: outer.minY), 1.0, 1.0),
-            (CGPoint(x: outer.maxX, y: outer.minY), -1.0, 1.0),
-            (CGPoint(x: outer.minX, y: outer.maxY), 1.0, -1.0),
-            (CGPoint(x: outer.maxX, y: outer.maxY), -1.0, -1.0)
-        ]
-        for (corner, dx, dy) in corners {
-            path.move(to: CGPoint(x: corner.x, y: corner.y + dy * length))
-            path.addLine(to: corner)
-            path.addLine(to: CGPoint(x: corner.x + dx * length, y: corner.y))
-        }
-        return path.cgPath
     }
     
     // MARK: - Touches
