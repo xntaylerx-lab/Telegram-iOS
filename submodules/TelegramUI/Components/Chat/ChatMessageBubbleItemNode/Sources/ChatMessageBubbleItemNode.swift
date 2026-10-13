@@ -39,6 +39,7 @@ import ChatMessageTextBubbleContentNode
 import ChatMessageRichDataBubbleContentNode
 import ChatMessageItemCommon
 import ChatMessageReplyInfoNode
+import VisualQuote
 import ChatMessageCallBubbleContentNode
 import ChatMessageInteractiveFileNode
 import ChatMessageFileBubbleContentNode
@@ -5982,6 +5983,12 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                                 return .action(InternalBubbleTapAction.Action({ [weak self] in
                                     guard let self else {
                                         return
+                                    }
+                                    // A reply to a photo detail opens the original in the gallery, zoomed to the region.
+                                    if let region = VisualQuoteTransport.region(in: item.message), let replyMessage = item.message.associatedMessages[attribute.messageId], replyMessage.media.contains(where: { $0 is TelegramMediaImage }) {
+                                        if item.controllerInteraction.openMessage(replyMessage, OpenMessageParams(mode: .default, mediaSubject: region.galleryMediaSubject)) {
+                                            return
+                                        }
                                     }
                                     var progress: Promise<Bool>?
                                     if let replyInfoNode = self.replyInfoNode {

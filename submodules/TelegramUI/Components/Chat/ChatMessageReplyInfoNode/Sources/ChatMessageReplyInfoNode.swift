@@ -8,6 +8,7 @@ import TelegramPresentationData
 import AccountContext
 import LocalizedPeerData
 import PhotoResources
+import VisualQuote
 import TelegramStringFormatting
 import TextFormat
 import InvisibleInkDustNode
@@ -143,6 +144,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
     private var dustNode: InvisibleInkDustNode?
     private var imageNode: TransformImageNode?
     private var previousMediaReference: AnyMediaReference?
+    fileprivate var previousVisualQuoteRegion: VisualQuoteRegion?
     private var expiredStoryIconView: UIImageView?
     private var checkLayer: CheckLayer?
     private var giftEmojiLayer: InlineStickerItemLayer?
@@ -528,7 +530,13 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             var updatedMediaReference: AnyMediaReference?
             var imageDimensions: CGSize?
             var hasRoundImage = false
-            if case let .pollOption(optionId) = arguments.innerSubject, let poll = arguments.message?.media.first(where: { $0 is TelegramMediaPoll }) as? TelegramMediaPoll, let pollOption = poll.options.first(where: { $0.opaqueIdentifier == optionId }), let media = pollOption.media {
+            // A reply to a photo detail (Visual Quote): show the selected fragment, larger than a plain photo thumbnail.
+            var visualQuote: (region: VisualQuoteRegion, message: EngineRawMessage, photo: TelegramMediaImage)?
+            if let region = VisualQuoteTransport.region(in: arguments.parentMessage), let message = arguments.message, !message.containsSecretMedia, let photo = message.media.first(where: { $0 is TelegramMediaImage }) as? TelegramMediaImage, let representation = largestRepresentationForPhoto(photo) {
+                visualQuote = (region, message, photo)
+                updatedMediaReference = .message(message: MessageReference(message), media: photo)
+                imageDimensions = CGSize(width: max(1.0, representation.dimensions.cgSize.width * region.rect.width), height: max(1.0, representation.dimensions.cgSize.height * region.rect.height))
+            } else if case let .pollOption(optionId) = arguments.innerSubject, let poll = arguments.message?.media.first(where: { $0 is TelegramMediaPoll }) as? TelegramMediaPoll, let pollOption = poll.options.first(where: { $0.opaqueIdentifier == optionId }), let media = pollOption.media {
                 if let image = media as? TelegramMediaImage {
                     updatedMediaReference = .message(message: MessageReference(arguments.parentMessage), media: image)
                     if let representation = largestRepresentationForPhoto(image) {
@@ -682,7 +690,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             
             let imageSide: CGFloat
             let titleLineHeight: CGFloat = titleLayout.linesRects().first?.height ?? 12.0
-            imageSide = titleLineHeight * 2.0
+            imageSide = floor(titleLineHeight * (visualQuote != nil ? VisualQuoteLayout.replyImageScale : 2.0))
             
             var applyImage: (() -> TransformImageNode)?
             if let imageDimensions = imageDimensions {
@@ -721,7 +729,9 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                 mediaUserLocation = .peer(message.id.peerId)
             }
             
-            if let updatedMediaReference = updatedMediaReference, mediaUpdated && imageDimensions != nil {
+            if let visualQuote, mediaUpdated || maybeNode?.previousVisualQuoteRegion != visualQuote.region {
+                updateImageSignal = visualQuoteCropImage(postbox: arguments.context.account.postbox, message: visualQuote.message, photo: visualQuote.photo, region: visualQuote.region)
+            } else if let updatedMediaReference = updatedMediaReference, mediaUpdated && imageDimensions != nil {
                 if let imageReference = updatedMediaReference.concrete(TelegramMediaImage.self) {
                     updateImageSignal = chatMessagePhotoThumbnail(account: arguments.context.account, userLocation: mediaUserLocation, photoReference: imageReference, blurred: hasSpoiler)
                 } else if let fileReference = updatedMediaReference.concrete(TelegramMediaFile.self) {
@@ -737,6 +747,9 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             size.width = max(titleLayout.size.width + additionalTitleWidth - textInsets.left - textInsets.right, textLeftInset + textLayout.size.width - textInsets.left - textInsets.right - textCutoutWidth) + leftInset + 6.0
             size.height = titleLayout.size.height + textLayout.size.height - 2 * (textInsets.top + textInsets.bottom) + 2 * spacing
             size.height += 2.0
+            if visualQuote != nil {
+                size.height = max(size.height, imageSide + 8.0)
+            }
             if isExpiredStory || isStory || isPoll {
                 size.width += 16.0
             }
@@ -755,6 +768,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                 }
                 
                 node.previousMediaReference = updatedMediaReference
+                node.previousVisualQuoteRegion = visualQuote?.region
                 
                 //node.textNode?.textNode.displaysAsynchronously = !arguments.presentationData.isPreview
                 

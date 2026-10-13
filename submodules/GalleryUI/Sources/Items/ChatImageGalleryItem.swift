@@ -244,6 +244,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     
     private var visualQuoteFrameNode: VisualQuoteFrameNode?
     private var visualQuoteReplyButton: VisualQuoteReplyButtonNode?
+    private var visualQuoteHighlightNode: VisualQuoteFrameNode?
     private var visualQuoteRegion: VisualQuoteRegion?
     private var visualQuoteDetectionId: Int = 0
     
@@ -1231,6 +1232,58 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             }
         })
         return true
+    }
+    
+    override func activateAsInitial() {
+        super.activateAsInitial()
+        guard let region = VisualQuoteRegion(mediaSubject: self.mediaSubject) else {
+            return
+        }
+        // Wait for the transition from the bubble to settle, then zoom to the region and flash its frame.
+        Queue.mainQueue().after(0.45) { [weak self] in
+            self?.zoomToVisualQuote(region: region)
+        }
+    }
+    
+    private func zoomToVisualQuote(region: VisualQuoteRegion) {
+        guard let (_, contentNode) = self.zoomableContent else {
+            return
+        }
+        let contentBounds = contentNode.bounds
+        guard contentBounds.width > 0.0, contentBounds.height > 0.0 else {
+            return
+        }
+        let scrollView = self.scrollNode.view
+        let regionRect = region.rect(in: contentBounds.size)
+        // Leave room around the fragment and keep the aspect ratio of the screen.
+        let padded = regionRect.insetBy(dx: -regionRect.width * 0.35, dy: -regionRect.height * 0.35)
+        let viewSize = scrollView.bounds.size
+        let scale = min(scrollView.maximumZoomScale, max(scrollView.minimumZoomScale, min(viewSize.width / max(1.0, padded.width), viewSize.height / max(1.0, padded.height))))
+        let targetSize = CGSize(width: viewSize.width / scale, height: viewSize.height / scale)
+        let target = CGRect(x: regionRect.midX - targetSize.width / 2.0, y: regionRect.midY - targetSize.height / 2.0, width: targetSize.width, height: targetSize.height)
+        scrollView.zoom(to: target, animated: true)
+        
+        let highlight = VisualQuoteFrameNode(region: region)
+        highlight.isUserInteractionEnabled = false
+        self.visualQuoteHighlightNode = highlight
+        self.addSubnode(highlight)
+        Queue.mainQueue().after(0.35) { [weak self, weak highlight] in
+            guard let self, let highlight, self.visualQuoteHighlightNode === highlight else {
+                return
+            }
+            highlight.frame = self.bounds
+            highlight.update(imageFrame: self.visualQuoteImageFrame, visibleBounds: self.bounds, region: region, animated: false)
+            highlight.animateIn()
+            Queue.mainQueue().after(1.4) { [weak self, weak highlight] in
+                guard let self, let highlight, self.visualQuoteHighlightNode === highlight else {
+                    return
+                }
+                self.visualQuoteHighlightNode = nil
+                highlight.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak highlight] _ in
+                    highlight?.removeFromSupernode()
+                })
+            }
+        }
     }
     
     override func contentTapAction() -> Bool {
