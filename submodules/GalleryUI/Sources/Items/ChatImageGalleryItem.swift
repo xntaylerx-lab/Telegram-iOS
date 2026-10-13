@@ -1270,7 +1270,24 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         highlight.update(imageFrame: contentBounds, visibleBounds: contentBounds, region: region, animated: false)
         self.visualQuoteHighlightNode = highlight
         contentNode.addSubnode(highlight)
+        self.updateVisualQuoteHighlightOutline()
         highlight.animateIn()
+    }
+    
+    override func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        super.scrollViewDidZoom(scrollView)
+        self.updateVisualQuoteHighlightOutline()
+    }
+    
+    private func updateVisualQuoteHighlightOutline() {
+        guard let highlight = self.visualQuoteHighlightNode, let (_, contentNode) = self.zoomableContent else {
+            return
+        }
+        let onScreenWidth = self.visualQuoteImageFrame.width
+        guard onScreenWidth > 0.0 else {
+            return
+        }
+        highlight.setOutlineWidth(contentNode.bounds.width / onScreenWidth)
     }
     
     private func clearVisualQuoteHighlight() {

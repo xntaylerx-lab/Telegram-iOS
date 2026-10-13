@@ -27,7 +27,7 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     private static let markWidth: CGFloat = 3.0
     /// The media editor's crop tool dims with black at 0.45; the passive highlight is denser, since there is no outline to carry the contrast.
     private static let editableDimAlpha: CGFloat = 0.4
-    private static let highlightDimAlpha: CGFloat = 0.65
+    private static let highlightDimAlpha: CGFloat = 0.45
     
     private enum DragMode {
         case move
@@ -61,15 +61,15 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         self.dimLayer.fillColor = UIColor(white: 0.0, alpha: mode == .editable ? VisualQuoteFrameNode.editableDimAlpha : VisualQuoteFrameNode.highlightDimAlpha).cgColor
         self.layer.addSublayer(self.dimLayer)
         
-        guard case .editable = mode else {
-            self.isUserInteractionEnabled = false
-            return
-        }
-        
         self.borderLayer.fillColor = nil
         self.borderLayer.strokeColor = UIColor(white: 1.0, alpha: 0.7).cgColor
         self.borderLayer.lineWidth = 1.0
         self.layer.addSublayer(self.borderLayer)
+        
+        guard case .editable = mode else {
+            self.isUserInteractionEnabled = false
+            return
+        }
         
         self.bracketsLayer.fillColor = nil
         self.bracketsLayer.strokeColor = UIColor.white.cgColor
@@ -95,6 +95,12 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         self.visibleBounds = visibleBounds
         self.region = region
         self.setFrameRect(self.rect(for: region), animated: animated)
+    }
+    
+    /// In `.highlight` mode the node lives inside the zoomed photo, so the outline width is set in
+    /// photo units to come out as one screen point at the current zoom.
+    public func setOutlineWidth(_ width: CGFloat) {
+        self.borderLayer.lineWidth = width
     }
     
     public func animateIn() {
@@ -144,13 +150,15 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         let dimPath = UIBezierPath(rect: self.imageFrame)
         dimPath.append(UIBezierPath(cgPath: shape))
         self.dimLayer.path = dimPath.cgPath
+        self.borderLayer.path = shape
         guard case .editable = self.mode else {
-            if animated, let dimFrom = previousPaths.0 {
-                self.dimLayer.animate(from: dimFrom, to: self.dimLayer.path!, keyPath: "path", timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue, duration: 0.3)
+            if animated, let dimFrom = previousPaths.0, let borderFrom = previousPaths.1 {
+                let timing = CAMediaTimingFunctionName.easeInEaseOut.rawValue
+                self.dimLayer.animate(from: dimFrom, to: self.dimLayer.path!, keyPath: "path", timingFunction: timing, duration: 0.3)
+                self.borderLayer.animate(from: borderFrom, to: self.borderLayer.path!, keyPath: "path", timingFunction: timing, duration: 0.3)
             }
             return
         }
-        self.borderLayer.path = shape
         self.bracketsLayer.path = smoothCornerMarksPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, smoothing: VisualQuoteFrameNode.cornerSmoothing, tail: VisualQuoteFrameNode.markTail, trim: VisualQuoteFrameNode.markTrim)
         
         if animated, let dimFrom = previousPaths.0, let borderFrom = previousPaths.1, let bracketsFrom = previousPaths.2 {
