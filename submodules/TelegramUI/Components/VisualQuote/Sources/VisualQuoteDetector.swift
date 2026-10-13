@@ -40,7 +40,6 @@ public final class VisualQuoteDetector {
             if case .available = availability {
                 self.isAvailable = true
             }
-            NSLog("[VisualQuote] cutout availability: \(availability)")
         })
     }
     
@@ -48,7 +47,6 @@ public final class VisualQuoteDetector {
     public static func detect(image: UIImage, normalizedPoint: CGPoint, completion: @escaping (VisualQuoteDetection) -> Void) {
         let pointDetection = VisualQuoteDetection.point(region: self.pointRegion(at: normalizedPoint, imageSize: image.size))
         guard self.isAvailable else {
-            NSLog("[VisualQuote] detect: object separation not available yet, falling back to point")
             completion(pointDetection)
             return
         }
@@ -62,7 +60,6 @@ public final class VisualQuoteDetector {
         let pixelImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: image.imageOrientation)
         cutoutImage(from: pixelImage, editedImage: nil, crop: nil, target: .point(normalizedPoint), includeExtracted: false, completion: { results in
             var detection = pointDetection
-            NSLog("[VisualQuote] detect: \(results.count) cutout result(s) for point \(normalizedPoint)")
             for result in results {
                 guard let maskImage = result.maskImage, case let .image(uiImage, ciImage) = maskImage, let cgImage = uiImage.cgImage else {
                     continue
@@ -72,7 +69,6 @@ public final class VisualQuoteDetector {
                 }
                 let rect = bitmap.boundingRect()
                 let containsPoint = bitmap.contains(normalizedPoint: normalizedPoint)
-                NSLog("[VisualQuote] detect: instance \(result.index) mask \(cgImage.width)x\(cgImage.height) bbox \(String(describing: rect)) containsPoint \(containsPoint)")
                 guard containsPoint, let rect else {
                     continue
                 }
