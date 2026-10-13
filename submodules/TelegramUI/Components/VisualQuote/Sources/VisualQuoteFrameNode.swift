@@ -12,9 +12,8 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     private static let handleHitRadius: CGFloat = 38.0
     private static let cornerRadius: CGFloat = 16.0
     private static let cornerSmoothing: CGFloat = 0.6
-    private static let markOffset: CGFloat = 6.0
-    private static let markSweep: CGFloat = 50.0
-    private static let markWidth: CGFloat = 2.5
+    private static let markTail: CGFloat = 6.0
+    private static let markWidth: CGFloat = 3.0
     
     private enum DragMode {
         case move
@@ -48,8 +47,8 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         self.layer.addSublayer(self.dimLayer)
         
         self.borderLayer.fillColor = nil
-        self.borderLayer.strokeColor = UIColor(white: 1.0, alpha: 0.85).cgColor
-        self.borderLayer.lineWidth = 1.5
+        self.borderLayer.strokeColor = UIColor(white: 1.0, alpha: 0.7).cgColor
+        self.borderLayer.lineWidth = 1.0
         self.layer.addSublayer(self.borderLayer)
         
         self.bracketsLayer.fillColor = nil
@@ -120,7 +119,7 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         dimPath.append(UIBezierPath(cgPath: shape))
         self.dimLayer.path = dimPath.cgPath
         self.borderLayer.path = shape
-        self.bracketsLayer.path = cornerMarksPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, offset: VisualQuoteFrameNode.markOffset, sweep: VisualQuoteFrameNode.markSweep)
+        self.bracketsLayer.path = smoothCornerMarksPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, smoothing: VisualQuoteFrameNode.cornerSmoothing, tail: VisualQuoteFrameNode.markTail)
         
         if animated, let dimFrom = previousPaths.0, let borderFrom = previousPaths.1, let bracketsFrom = previousPaths.2 {
             let timing = CAMediaTimingFunctionName.easeInEaseOut.rawValue
