@@ -28,6 +28,7 @@ import AdsReportScreen
 import GlassBackgroundComponent
 import ComponentFlow
 import ComponentDisplayAdapters
+import VisualQuote
 
 /// Upper bound on the pixel dimensions a full-screen photo is decoded and rasterized at.
 /// Photos larger than this are downscaled to fit; smaller ones are left untouched.
@@ -240,6 +241,12 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private let moreBarButton: MoreHeaderButton
     
     private var tilingNode: TilingNode?
+    
+    private var visualQuoteSelectionNode: VisualQuoteSelectionNode?
+    private var visualQuoteReplyButton: VisualQuoteReplyButtonNode?
+    private var visualQuoteDetection: VisualQuoteDetection?
+    private var visualQuoteDetectionId: Int = 0
+    
     fileprivate let _ready = Promise<Void>()
     fileprivate let _title = Promise<String>()
     fileprivate let _titleContent = Promise<GalleryTitleView.Content?>(nil)
@@ -360,6 +367,8 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         let statusSize = CGSize(width: 50.0, height: 50.0)
         transition.updateFrame(node: self.statusNodeContainer, frame: CGRect(origin: CGPoint(x: floor((layout.size.width - statusSize.width) / 2.0), y: floor((layout.size.height - statusSize.height) / 2.0)), size: statusSize))
         transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(), size: statusSize))
+        
+        self.updateVisualQuoteLayout(transition: transition)
     }
     
     private func setupImageRecognition(_ generate: @escaping (TransformImageArguments) -> DrawingContext?, dimensions: PixelDimensions) {
@@ -458,6 +467,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     fileprivate func setMessage(_ message: Message, mediaSubject: GalleryMediaSubject?, displayInfo: Bool, translateToLanguage: String?, peerIsCopyProtected: Bool, isSecret: Bool, location: MessageHistoryEntryLocation?) {
+        if self.message?.id != message.id {
+            self.clearVisualQuoteSelection(animated: false)
+        }
         self.message = message
         self.mediaSubject = mediaSubject
         self.displayInfo = displayInfo
@@ -466,6 +478,10 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.isSecret = isSecret
         self.imageNode.captureProtected = message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.isCopyProtected() || peerIsCopyProtected || isSecret || message.paidContent != nil
         self.updateFooter(animated: false)
+        
+        if self.isVisualQuoteEnabled && self.isVisualQuoteSupported {
+            VisualQuoteDetector.prepare(context: self.context)
+        }
         
         var title: String?
         if let _ = message.adAttribute {
@@ -1168,6 +1184,185 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         
         self.statusNodeContainer.layer.animatePosition(from: self.statusNodeContainer.position, to: CGPoint(x: transformedSuperFrame.midX, y: transformedSuperFrame.midY), duration: 0.25, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
         self.statusNodeContainer.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, timingFunction: CAMediaTimingFunctionName.easeIn.rawValue, removeOnCompletion: false)
+    }
+    
+    // MARK: - Visual Quote
+    
+    private var isVisualQuoteEnabled: Bool {
+        return self.context.sharedContext.immediateExperimentalUISettings.visualQuote
+    }
+    
+    /// Regular photos only: no secret or paid media, no ads, no tiled local files.
+    private var isVisualQuoteSupported: Bool {
+        guard let message = self.message, !self.isSecret, message.adAttribute == nil, message.paidContent == nil, self.tilingNode == nil else {
+            return false
+        }
+        return message.media.contains(where: { $0 is TelegramMediaImage })
+    }
+    
+    override func contentLongTapAction(location: CGPoint) -> Bool {
+        guard self.isVisualQuoteEnabled, self.isVisualQuoteSupported, let image = self.imageNode.image else {
+            return false
+        }
+        let bounds = self.imageNode.bounds
+        guard bounds.width > 0.0, bounds.height > 0.0 else {
+            return false
+        }
+        let pointInImage = self.scrollNode.view.convert(location, to: self.imageNode.view)
+        guard bounds.contains(pointInImage) else {
+            return false
+        }
+        let normalizedPoint = CGPoint(x: pointInImage.x / bounds.width, y: pointInImage.y / bounds.height)
+        
+        let selectionNode = self.visualQuoteSelectionNodeForDisplay()
+        selectionNode.beginSelection(at: normalizedPoint, animated: true)
+        HapticFeedback().impact(.light)
+        
+        self.visualQuoteDetectionId += 1
+        let detectionId = self.visualQuoteDetectionId
+        self.visualQuoteDetection = nil
+        self.updateVisualQuoteReplyButton(transition: .animated(duration: 0.2, curve: .easeInOut))
+        
+        VisualQuoteDetector.detect(image: image, normalizedPoint: normalizedPoint, completion: { [weak self] detection in
+            guard let self, self.visualQuoteDetectionId == detectionId, let selectionNode = self.visualQuoteSelectionNode else {
+                return
+            }
+            self.visualQuoteDetection = detection
+            selectionNode.setDetection(detection, animated: true)
+            if case .object = detection {
+                HapticFeedback().tap()
+            }
+            self.updateVisualQuoteReplyButton(transition: .animated(duration: 0.3, curve: .spring))
+        })
+        return true
+    }
+    
+    override func contentTapAction() -> Bool {
+        if self.visualQuoteSelectionNode != nil {
+            self.clearVisualQuoteSelection(animated: true)
+            return true
+        }
+        return false
+    }
+    
+    override func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        super.scrollViewDidZoom(scrollView)
+        if self.visualQuoteReplyButton != nil {
+            self.updateVisualQuoteReplyButton(transition: .immediate)
+        }
+    }
+    
+    private func visualQuoteSelectionNodeForDisplay() -> VisualQuoteSelectionNode {
+        if let node = self.visualQuoteSelectionNode {
+            return node
+        }
+        let node = VisualQuoteSelectionNode(highlightStyle: .glow)
+        self.visualQuoteSelectionNode = node
+        self.imageNode.addSubnode(node)
+        self.updateVisualQuoteLayout(transition: .immediate)
+        return node
+    }
+    
+    private func clearVisualQuoteSelection(animated: Bool) {
+        self.visualQuoteDetectionId += 1
+        self.visualQuoteDetection = nil
+        if let node = self.visualQuoteSelectionNode {
+            self.visualQuoteSelectionNode = nil
+            if animated {
+                node.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak node] _ in
+                    node?.removeFromSupernode()
+                })
+            } else {
+                node.removeFromSupernode()
+            }
+        }
+        self.updateVisualQuoteReplyButton(transition: animated ? .animated(duration: 0.2, curve: .easeInOut) : .immediate)
+    }
+    
+    private func updateVisualQuoteLayout(transition: ContainedViewLayoutTransition) {
+        if let node = self.visualQuoteSelectionNode {
+            node.frame = self.imageNode.bounds
+            node.update(size: self.imageNode.bounds.size, pointsPerUnit: self.scrollNode.view.minimumZoomScale)
+        }
+        self.updateVisualQuoteReplyButton(transition: transition)
+    }
+    
+    private func updateVisualQuoteReplyButton(transition: ContainedViewLayoutTransition) {
+        guard let detection = self.visualQuoteDetection, self.visualQuoteSelectionNode != nil else {
+            if let button = self.visualQuoteReplyButton {
+                self.visualQuoteReplyButton = nil
+                if transition.isAnimated {
+                    button.layer.animateScale(from: 1.0, to: 0.8, duration: 0.2, removeOnCompletion: false)
+                    button.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak button] _ in
+                        button?.removeFromSupernode()
+                    })
+                } else {
+                    button.removeFromSupernode()
+                }
+            }
+            return
+        }
+        
+        let button: VisualQuoteReplyButtonNode
+        var isNew = false
+        if let current = self.visualQuoteReplyButton {
+            button = current
+        } else {
+            button = VisualQuoteReplyButtonNode()
+            self.visualQuoteReplyButton = button
+            self.addSubnode(button)
+            isNew = true
+        }
+        let size = button.update(theme: defaultDarkColorPresentationTheme, title: self.presentationData.strings.Conversation_ContextMenuReply, action: { [weak self] in
+            self?.visualQuoteReplyPressed()
+        }, transition: transition)
+        
+        let imageSize = self.imageNode.bounds.size
+        let regionRect = self.imageNode.view.convert(detection.region.rect(in: imageSize), to: self.view)
+        let anchor = self.imageNode.view.convert(detection.region.point(in: imageSize), to: self.view)
+        let spacing: CGFloat = 16.0
+        let topLimit: CGFloat = 90.0
+        let bottomLimit: CGFloat = self.bounds.height - 110.0
+        
+        var frame = CGRect(origin: CGPoint(x: anchor.x - size.width / 2.0, y: regionRect.maxY + spacing), size: size)
+        if frame.maxY > bottomLimit {
+            frame.origin.y = regionRect.minY - spacing - size.height
+            if frame.minY < topLimit {
+                frame.origin.y = bottomLimit - size.height
+            }
+        }
+        frame.origin.x = max(16.0, min(self.bounds.width - 16.0 - size.width, frame.origin.x))
+        frame.origin.x = floor(frame.origin.x)
+        frame.origin.y = floor(frame.origin.y)
+        
+        if isNew {
+            button.frame = frame
+            if transition.isAnimated {
+                button.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+                button.layer.animateSpring(from: 0.8 as NSNumber, to: 1.0 as NSNumber, keyPath: "transform.scale", duration: 0.5)
+            }
+        } else {
+            transition.updateFrame(node: button, frame: frame)
+        }
+    }
+    
+    private func visualQuoteReplyPressed() {
+        guard let message = self.message, let _ = self.visualQuoteDetection else {
+            return
+        }
+        // The selected region reaches the composer with the next milestone; for now this mirrors the "Reply" action of the "more" menu.
+        let context = self.context
+        let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: message.id.peerId))
+        |> deliverOnMainQueue).start(next: { [weak self] peer in
+            guard let self, let peer, canSendMessagesToPeer(peer), let navigationController = self.baseNavigationController() else {
+                return
+            }
+            self.beginCustomDismiss(.simpleAnimation)
+            context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(message.id), highlight: ChatControllerSubject.MessageHighlight(quote: nil, subject: nil), timecode: nil, setupReply: true)))
+            Queue.mainQueue().after(0.3) {
+                self.completeCustomDismiss(false)
+            }
+        })
     }
     
     override func visibilityUpdated(isVisible: Bool) {

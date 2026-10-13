@@ -166,6 +166,7 @@ private enum DebugControllerEntry: ItemListNodeEntry {
     case forceClearGlass(Bool)
     case debugRipple(Bool)
     case debugRichText(Bool)
+    case visualQuote(Bool)
     case coreListChatBackend(Bool)
     case forceRLottieBackend(Bool)
     case respectSystemMicrophone(Bool)
@@ -213,7 +214,7 @@ private enum DebugControllerEntry: ItemListNodeEntry {
             return DebugControllerSection.web.rawValue
         case .keepChatNavigationStack, .skipReadHistory, .alwaysDisplayTyping, .debugRatingLayout, .crashOnSlowQueries, .crashOnMemoryPressure:
             return DebugControllerSection.experiments.rawValue
-        case .clearTips, .resetNotifications, .crash, .fillLocalSavedMessageCache, .resetDatabase, .resetDatabaseAndCache, .resetHoles, .resetTagHoles, .reindexUnread, .resetCacheIndex, .reindexCache, .resetBiometricsData, .optimizeDatabase, .photoPreview, .knockoutWallpaper, .compressedEmojiCache, .storiesJpegExperiment, .checkSerializedData, .enableQuickReactionSwitch, .experimentalCompatibility, .enableDebugDataDisplay, .fakeGlass, .forceClearGlass, .debugRipple, .debugRichText, .coreListChatBackend, .forceRLottieBackend, .respectSystemMicrophone, .useModernVideoMessagePipeline, .browserExperiment, .allForumsHaveTabs, .enableReactionOverrides, .restorePurchases, .disableReloginTokens, .liveStreamV2, .experimentalCallMute, .groupCallReferenceEngine, .playerV2, .devRequests, .enableUpdates, .pwa, .enableLocalTranslation, .testPasscodeMigration:
+        case .clearTips, .resetNotifications, .crash, .fillLocalSavedMessageCache, .resetDatabase, .resetDatabaseAndCache, .resetHoles, .resetTagHoles, .reindexUnread, .resetCacheIndex, .reindexCache, .resetBiometricsData, .optimizeDatabase, .photoPreview, .knockoutWallpaper, .compressedEmojiCache, .storiesJpegExperiment, .checkSerializedData, .enableQuickReactionSwitch, .experimentalCompatibility, .enableDebugDataDisplay, .fakeGlass, .forceClearGlass, .debugRipple, .debugRichText, .coreListChatBackend, .forceRLottieBackend, .respectSystemMicrophone, .useModernVideoMessagePipeline, .visualQuote, .browserExperiment, .allForumsHaveTabs, .enableReactionOverrides, .restorePurchases, .disableReloginTokens, .liveStreamV2, .experimentalCallMute, .groupCallReferenceEngine, .playerV2, .devRequests, .enableUpdates, .pwa, .enableLocalTranslation, .testPasscodeMigration:
             return DebugControllerSection.experiments.rawValue
         case .logTranslationRecognition, .resetTranslationStates:
             return DebugControllerSection.translation.rawValue
@@ -322,6 +323,8 @@ private enum DebugControllerEntry: ItemListNodeEntry {
             return 45
         case .debugRichText:
             return 46
+        case .visualQuote:
+            return 99
         case .browserExperiment:
             return 47
         case .allForumsHaveTabs:
@@ -1415,6 +1418,14 @@ private enum DebugControllerEntry: ItemListNodeEntry {
                     })
                 }).start()
             })
+        case let .visualQuote(value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Visual Quote", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                let _ = updateExperimentalUISettingsInteractively(accountManager: arguments.sharedContext.accountManager, { settings in
+                    var settings = settings
+                    settings.visualQuote = value
+                    return settings
+                }).start()
+            })
         case let .coreListChatBackend(value):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Chat: CoreList backend (PoC)", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 let _ = arguments.sharedContext.accountManager.transaction ({ transaction in
@@ -1870,6 +1881,7 @@ private func debugControllerEntries(context: AccountContext?, sharedContext: Sha
         entries.append(.forceClearGlass(experimentalSettings.forceClearGlass))
         entries.append(.debugRipple(experimentalSettings.debugRipple))
         entries.append(.debugRichText(experimentalSettings.forceNewTextInput))
+        entries.append(.visualQuote(experimentalSettings.visualQuote))
         #if DEBUG
         entries.append(.browserExperiment(experimentalSettings.browserExperiment))
         #else

@@ -69,6 +69,7 @@ swift_library(
         "//submodules/Components/ComponentDisplayAdapters",
         "//submodules/ComponentFlow",
         "//submodules/TelegramUI/Components/ToastComponent",
+        "//submodules/TelegramUI/Components/VisualQuote",
         "//submodules/SemanticStatusNode",
         "//submodules/TelegramUI/Components/PlainButtonComponent",
         "//submodules/AvatarNode",

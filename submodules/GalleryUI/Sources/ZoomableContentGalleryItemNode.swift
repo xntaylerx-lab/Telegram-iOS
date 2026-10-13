@@ -67,6 +67,11 @@ open class ZoomableContentGalleryItemNode: GalleryItemNode, ASScrollViewDelegate
         return false
     }
     
+    /// Called when the user holds a finger on the content. `location` is in the scroll view's coordinates.
+    open func contentLongTapAction(location: CGPoint) -> Bool {
+        return false
+    }
+    
     @objc open func contentTap(_ recognizer: TapLongTapOrDoubleTapGestureRecognizer) {
         if recognizer.state == .ended {
             if let (gesture, location) = recognizer.lastRecognizedGestureAndLocation {
@@ -100,6 +105,10 @@ open class ZoomableContentGalleryItemNode: GalleryItemNode, ASScrollViewDelegate
                                 self.scrollNode.view.zoom(to: rectToZoomTo, animated: true)
                             } else {
                                 self.scrollNode.view.setZoomScale(self.scrollNode.view.minimumZoomScale, animated: true)
+                            }
+                        case .longTap:
+                            if self.contentLongTapAction(location: location) {
+                                return
                             }
                         default:
                             break
