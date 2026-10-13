@@ -36,11 +36,30 @@ private struct SmoothCorner {
     }
 }
 
+
+private func lerp(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+    return CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+}
+
+/// Cubic Bézier control points for the part of the curve after `t` (de Casteljau).
+private func cubicTail(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, from t: CGFloat) -> (CGPoint, CGPoint, CGPoint, CGPoint) {
+    let p01 = lerp(p0, p1, t), p12 = lerp(p1, p2, t), p23 = lerp(p2, p3, t)
+    let p012 = lerp(p01, p12, t), p123 = lerp(p12, p23, t)
+    return (lerp(p012, p123, t), p123, p23, p3)
+}
+
+/// Cubic Bézier control points for the part of the curve before `t`.
+private func cubicHead(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, to t: CGFloat) -> (CGPoint, CGPoint, CGPoint, CGPoint) {
+    let p01 = lerp(p0, p1, t), p12 = lerp(p1, p2, t), p23 = lerp(p2, p3, t)
+    let p012 = lerp(p01, p12, t), p123 = lerp(p12, p23, t)
+    return (p0, p01, p012, lerp(p012, p123, t))
+}
+
 /// Appends the four corner curves of `rect` to `path`, clockwise from the top-right corner.
 /// `edge` is called before each corner with the point where the corner curve starts; it either
 /// draws the edge up to that point or starts a new subpath there. `extension` adds straight tails
 /// along the edges on both sides of each corner (used for corner marks).
-private func addSmoothCorners(to path: UIBezierPath, rect: CGRect, corner k: SmoothCorner, extension tail: CGFloat, edge: (UIBezierPath, CGPoint) -> Void) {
+private func addSmoothCorners(to path: UIBezierPath, rect: CGRect, corner k: SmoothCorner, extension tail: CGFloat, trim: CGFloat, edge: (UIBezierPath, CGPoint) -> Void) {
     let w = rect.width
     let h = rect.height
     let r = k.radius
@@ -48,38 +67,47 @@ private func addSmoothCorners(to path: UIBezierPath, rect: CGRect, corner k: Smo
     func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
         return CGPoint(x: rect.minX + x, y: rect.minY + y)
     }
+    // One corner: a lead-in cubic, the circular arc and a lead-out cubic. `trim` (0...1) drops that
+    // fraction of the lead-in and lead-out curves, which shortens corner marks without moving the arc.
+    func corner(leadIn: (CGPoint, CGPoint, CGPoint, CGPoint), arcCenter: CGPoint, startAngle: CGFloat, endAngle: CGFloat, leadOut: (CGPoint, CGPoint, CGPoint, CGPoint), tailStart: CGPoint, tailEnd: CGPoint) {
+        let lead = trim > 0.0 ? cubicTail(leadIn.0, leadIn.1, leadIn.2, leadIn.3, from: trim) : leadIn
+        let out = trim > 0.0 ? cubicHead(leadOut.0, leadOut.1, leadOut.2, leadOut.3, to: 1.0 - trim) : leadOut
+        edge(path, tail > 0.0 ? tailStart : lead.0)
+        if tail > 0.0 { path.addLine(to: lead.0) }
+        path.addCurve(to: lead.3, controlPoint1: lead.1, controlPoint2: lead.2)
+        path.addArc(withCenter: arcCenter, radius: r, startAngle: startAngle, endAngle: endAngle, clockwise: true)
+        path.addCurve(to: out.3, controlPoint1: out.1, controlPoint2: out.2)
+        if tail > 0.0 { path.addLine(to: tailEnd) }
+    }
     
     // Top-right
-    edge(path, point(w - k.p - tail, 0.0))
-    if tail > 0.0 { path.addLine(to: point(w - k.p, 0.0)) }
-    path.addCurve(to: point(w - k.p + k.a + k.b + k.c, k.d), controlPoint1: point(w - k.p + k.a, 0.0), controlPoint2: point(w - k.p + k.a + k.b, 0.0))
-    path.addArc(withCenter: point(w - r, r), radius: r, startAngle: -(.pi / 2.0) + alpha, endAngle: -alpha, clockwise: true)
-    path.addCurve(to: point(w, k.p), controlPoint1: point(w, k.p - k.a - k.b), controlPoint2: point(w, k.p - k.a))
-    if tail > 0.0 { path.addLine(to: point(w, k.p + tail)) }
-    
+    corner(
+        leadIn: (point(w - k.p, 0.0), point(w - k.p + k.a, 0.0), point(w - k.p + k.a + k.b, 0.0), point(w - k.p + k.a + k.b + k.c, k.d)),
+        arcCenter: point(w - r, r), startAngle: -(.pi / 2.0) + alpha, endAngle: -alpha,
+        leadOut: (point(w - k.d, k.p - k.a - k.b - k.c), point(w, k.p - k.a - k.b), point(w, k.p - k.a), point(w, k.p)),
+        tailStart: point(w - k.p - tail, 0.0), tailEnd: point(w, k.p + tail)
+    )
     // Bottom-right
-    edge(path, point(w, h - k.p - tail))
-    if tail > 0.0 { path.addLine(to: point(w, h - k.p)) }
-    path.addCurve(to: point(w - k.d, h - k.p + k.a + k.b + k.c), controlPoint1: point(w, h - k.p + k.a), controlPoint2: point(w, h - k.p + k.a + k.b))
-    path.addArc(withCenter: point(w - r, h - r), radius: r, startAngle: alpha, endAngle: (.pi / 2.0) - alpha, clockwise: true)
-    path.addCurve(to: point(w - k.p, h), controlPoint1: point(w - k.p + k.a + k.b, h), controlPoint2: point(w - k.p + k.a, h))
-    if tail > 0.0 { path.addLine(to: point(w - k.p - tail, h)) }
-    
+    corner(
+        leadIn: (point(w, h - k.p), point(w, h - k.p + k.a), point(w, h - k.p + k.a + k.b), point(w - k.d, h - k.p + k.a + k.b + k.c)),
+        arcCenter: point(w - r, h - r), startAngle: alpha, endAngle: (.pi / 2.0) - alpha,
+        leadOut: (point(w - k.p + k.a + k.b + k.c, h - k.d), point(w - k.p + k.a + k.b, h), point(w - k.p + k.a, h), point(w - k.p, h)),
+        tailStart: point(w, h - k.p - tail), tailEnd: point(w - k.p - tail, h)
+    )
     // Bottom-left
-    edge(path, point(k.p + tail, h))
-    if tail > 0.0 { path.addLine(to: point(k.p, h)) }
-    path.addCurve(to: point(k.p - k.a - k.b - k.c, h - k.d), controlPoint1: point(k.p - k.a, h), controlPoint2: point(k.p - k.a - k.b, h))
-    path.addArc(withCenter: point(r, h - r), radius: r, startAngle: (.pi / 2.0) + alpha, endAngle: .pi - alpha, clockwise: true)
-    path.addCurve(to: point(0.0, h - k.p), controlPoint1: point(0.0, h - k.p + k.a + k.b), controlPoint2: point(0.0, h - k.p + k.a))
-    if tail > 0.0 { path.addLine(to: point(0.0, h - k.p - tail)) }
-    
+    corner(
+        leadIn: (point(k.p, h), point(k.p - k.a, h), point(k.p - k.a - k.b, h), point(k.p - k.a - k.b - k.c, h - k.d)),
+        arcCenter: point(r, h - r), startAngle: (.pi / 2.0) + alpha, endAngle: .pi - alpha,
+        leadOut: (point(k.d, h - k.p + k.a + k.b + k.c), point(0.0, h - k.p + k.a + k.b), point(0.0, h - k.p + k.a), point(0.0, h - k.p)),
+        tailStart: point(k.p + tail, h), tailEnd: point(0.0, h - k.p - tail)
+    )
     // Top-left
-    edge(path, point(0.0, k.p + tail))
-    if tail > 0.0 { path.addLine(to: point(0.0, k.p)) }
-    path.addCurve(to: point(k.d, k.p - k.a - k.b - k.c), controlPoint1: point(0.0, k.p - k.a), controlPoint2: point(0.0, k.p - k.a - k.b))
-    path.addArc(withCenter: point(r, r), radius: r, startAngle: .pi + alpha, endAngle: (3.0 * .pi / 2.0) - alpha, clockwise: true)
-    path.addCurve(to: point(k.p, 0.0), controlPoint1: point(k.p - k.a - k.b, 0.0), controlPoint2: point(k.p - k.a, 0.0))
-    if tail > 0.0 { path.addLine(to: point(k.p + tail, 0.0)) }
+    corner(
+        leadIn: (point(0.0, k.p), point(0.0, k.p - k.a), point(0.0, k.p - k.a - k.b), point(k.d, k.p - k.a - k.b - k.c)),
+        arcCenter: point(r, r), startAngle: .pi + alpha, endAngle: (3.0 * .pi / 2.0) - alpha,
+        leadOut: (point(k.p - k.a - k.b - k.c, k.d), point(k.p - k.a - k.b, 0.0), point(k.p - k.a, 0.0), point(k.p, 0.0)),
+        tailStart: point(0.0, k.p + tail), tailEnd: point(k.p + tail, 0.0)
+    )
 }
 
 /// A closed rounded rectangle with smooth corners.
@@ -90,7 +118,7 @@ func smoothRoundedRectPath(_ rect: CGRect, cornerRadius: CGFloat, smoothing: CGF
     }
     let path = UIBezierPath()
     var isFirst = true
-    addSmoothCorners(to: path, rect: rect, corner: corner, extension: 0.0, edge: { path, point in
+    addSmoothCorners(to: path, rect: rect, corner: corner, extension: 0.0, trim: 0.0, edge: { path, point in
         if isFirst {
             path.move(to: point)
             isFirst = false
@@ -104,11 +132,11 @@ func smoothRoundedRectPath(_ rect: CGRect, cornerRadius: CGFloat, smoothing: CGF
 
 /// The four corners of the same rounded rectangle as separate open strokes, each extended by
 /// `tail` points along both edges: corner marks that sit exactly on the frame's outline.
-func smoothCornerMarksPath(_ rect: CGRect, cornerRadius: CGFloat, smoothing: CGFloat, tail: CGFloat) -> CGPath {
+func smoothCornerMarksPath(_ rect: CGRect, cornerRadius: CGFloat, smoothing: CGFloat, tail: CGFloat, trim: CGFloat = 0.0) -> CGPath {
     let corner = SmoothCorner(rect: rect, cornerRadius: cornerRadius, smoothing: smoothing)
     let maxTail = max(0.0, min(rect.width, rect.height) / 2.0 - corner.p - 2.0)
     let path = UIBezierPath()
-    addSmoothCorners(to: path, rect: rect, corner: corner, extension: min(tail, maxTail), edge: { path, point in
+    addSmoothCorners(to: path, rect: rect, corner: corner, extension: min(tail, maxTail), trim: trim, edge: { path, point in
         path.move(to: point)
     })
     return path.cgPath

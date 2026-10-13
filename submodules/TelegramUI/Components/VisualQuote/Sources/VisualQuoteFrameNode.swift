@@ -13,6 +13,8 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     private static let cornerRadius: CGFloat = 16.0
     private static let cornerSmoothing: CGFloat = 0.6
     private static let markTail: CGFloat = 0.0
+    /// Fraction of the straight-ish ends of each corner curve left out of the marks.
+    private static let markTrim: CGFloat = 0.35
     private static let markWidth: CGFloat = 3.0
     
     private enum DragMode {
@@ -119,7 +121,7 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         dimPath.append(UIBezierPath(cgPath: shape))
         self.dimLayer.path = dimPath.cgPath
         self.borderLayer.path = shape
-        self.bracketsLayer.path = smoothCornerMarksPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, smoothing: VisualQuoteFrameNode.cornerSmoothing, tail: VisualQuoteFrameNode.markTail)
+        self.bracketsLayer.path = smoothCornerMarksPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, smoothing: VisualQuoteFrameNode.cornerSmoothing, tail: VisualQuoteFrameNode.markTail, trim: VisualQuoteFrameNode.markTrim)
         
         if animated, let dimFrom = previousPaths.0, let borderFrom = previousPaths.1, let bracketsFrom = previousPaths.2 {
             let timing = CAMediaTimingFunctionName.easeInEaseOut.rawValue
