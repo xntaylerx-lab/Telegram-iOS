@@ -7,7 +7,16 @@ import AsyncDisplayKit
 /// the rest of the photo is dimmed, like the crop tool in the media editor. The user
 /// drags a corner to resize or the inside to move. The node spans the whole item and
 /// only takes touches near the frame, so taps outside still reach the photo.
+///
+/// In the `.highlight` mode the node only dims the photo around the area: no outline,
+/// no handles and no touches. The receiver sees this when opening a quoted region.
 public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDelegate {
+    public enum Mode {
+        case editable
+        case highlight
+    }
+    
+    public let mode: Mode
     private static let minimumSide: CGFloat = 44.0
     private static let handleHitRadius: CGFloat = 38.0
     private static let cornerRadius: CGFloat = 16.0
@@ -39,14 +48,20 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     private var dragMode: DragMode?
     private var dragStartRect: CGRect = CGRect()
     
-    public init(region: VisualQuoteRegion) {
+    public init(region: VisualQuoteRegion, mode: Mode = .editable) {
         self.region = region
+        self.mode = mode
         
         super.init()
         
         self.dimLayer.fillRule = .evenOdd
         self.dimLayer.fillColor = UIColor(white: 0.0, alpha: 0.4).cgColor
         self.layer.addSublayer(self.dimLayer)
+        
+        guard case .editable = mode else {
+            self.isUserInteractionEnabled = false
+            return
+        }
         
         self.borderLayer.fillColor = nil
         self.borderLayer.strokeColor = UIColor(white: 1.0, alpha: 0.7).cgColor
@@ -63,6 +78,9 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     override public func didLoad() {
         super.didLoad()
         
+        guard case .editable = self.mode else {
+            return
+        }
         let panRecognizer = UIPanGestureRecognizer(target: self, action: #selector(self.panGesture(_:)))
         panRecognizer.delegate = self
         self.view.addGestureRecognizer(panRecognizer)
@@ -78,6 +96,9 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     
     public func animateIn() {
         self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+        guard case .editable = self.mode else {
+            return
+        }
         self.bracketsLayer.animateSpring(from: 1.15 as NSNumber, to: 1.0 as NSNumber, keyPath: "transform.scale", duration: 0.5)
     }
     
@@ -120,6 +141,12 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
         let dimPath = UIBezierPath(rect: self.imageFrame)
         dimPath.append(UIBezierPath(cgPath: shape))
         self.dimLayer.path = dimPath.cgPath
+        guard case .editable = self.mode else {
+            if animated, let dimFrom = previousPaths.0 {
+                self.dimLayer.animate(from: dimFrom, to: self.dimLayer.path!, keyPath: "path", timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue, duration: 0.3)
+            }
+            return
+        }
         self.borderLayer.path = shape
         self.bracketsLayer.path = smoothCornerMarksPath(rect, cornerRadius: VisualQuoteFrameNode.cornerRadius, smoothing: VisualQuoteFrameNode.cornerSmoothing, tail: VisualQuoteFrameNode.markTail, trim: VisualQuoteFrameNode.markTrim)
         
@@ -134,6 +161,9 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     // MARK: - Touches
     
     override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard case .editable = self.mode else {
+            return nil
+        }
         let radius = VisualQuoteFrameNode.handleHitRadius
         if self.frameRect.insetBy(dx: -radius, dy: -radius).contains(point) {
             return self.view

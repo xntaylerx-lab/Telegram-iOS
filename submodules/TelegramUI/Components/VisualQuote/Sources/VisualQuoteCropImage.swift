@@ -10,7 +10,7 @@ import PhotoResources
 /// Layout constants shared by the places that draw a visual quote.
 public enum VisualQuoteLayout {
     /// The fragment in a reply header, as a multiple of the title line height (a plain photo reply uses 2).
-    public static let replyImageScale: CGFloat = 4.5
+    public static let replyImageScale: CGFloat = 6.0
 }
 
 public extension VisualQuoteRegion {

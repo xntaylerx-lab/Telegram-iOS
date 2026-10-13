@@ -1239,7 +1239,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         guard let region = VisualQuoteRegion(mediaSubject: self.mediaSubject) else {
             return
         }
-        // Wait for the transition from the bubble to settle, then zoom to the region and flash its frame.
+        // Wait for the transition from the bubble to settle, then zoom to the region and dim the rest.
         Queue.mainQueue().after(0.45) { [weak self] in
             self?.zoomToVisualQuote(region: region)
         }
@@ -1263,27 +1263,24 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         let target = CGRect(x: regionRect.midX - targetSize.width / 2.0, y: regionRect.midY - targetSize.height / 2.0, width: targetSize.width, height: targetSize.height)
         scrollView.zoom(to: target, animated: true)
         
-        let highlight = VisualQuoteFrameNode(region: region)
-        highlight.isUserInteractionEnabled = false
+        // Dim the photo around the quoted area and keep it that way: the highlight lives inside
+        // the zoomable content, so it follows every zoom and scroll until the gallery closes.
+        let highlight = VisualQuoteFrameNode(region: region, mode: .highlight)
+        highlight.frame = contentBounds
+        highlight.update(imageFrame: contentBounds, visibleBounds: contentBounds, region: region, animated: false)
         self.visualQuoteHighlightNode = highlight
-        self.addSubnode(highlight)
-        Queue.mainQueue().after(0.35) { [weak self, weak highlight] in
-            guard let self, let highlight, self.visualQuoteHighlightNode === highlight else {
-                return
-            }
-            highlight.frame = self.bounds
-            highlight.update(imageFrame: self.visualQuoteImageFrame, visibleBounds: self.bounds, region: region, animated: false)
-            highlight.animateIn()
-            Queue.mainQueue().after(1.4) { [weak self, weak highlight] in
-                guard let self, let highlight, self.visualQuoteHighlightNode === highlight else {
-                    return
-                }
-                self.visualQuoteHighlightNode = nil
-                highlight.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak highlight] _ in
-                    highlight?.removeFromSupernode()
-                })
-            }
+        contentNode.addSubnode(highlight)
+        highlight.animateIn()
+    }
+    
+    private func clearVisualQuoteHighlight() {
+        guard let highlight = self.visualQuoteHighlightNode else {
+            return
         }
+        self.visualQuoteHighlightNode = nil
+        highlight.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak highlight] _ in
+            highlight?.removeFromSupernode()
+        })
     }
     
     override func contentTapAction() -> Bool {
@@ -1310,6 +1307,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         if let current = self.visualQuoteFrameNode {
             frameNode = current
         } else {
+            self.clearVisualQuoteHighlight()
             frameNode = VisualQuoteFrameNode(region: region)
             frameNode.regionChanged = { [weak self] region in
                 guard let self else {
