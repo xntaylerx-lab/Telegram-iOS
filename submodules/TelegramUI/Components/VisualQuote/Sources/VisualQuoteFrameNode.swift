@@ -12,7 +12,7 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     private static let handleHitRadius: CGFloat = 38.0
     private static let cornerRadius: CGFloat = 16.0
     private static let cornerSmoothing: CGFloat = 0.6
-    private static let markTail: CGFloat = 6.0
+    private static let markTail: CGFloat = 0.0
     private static let markWidth: CGFloat = 3.0
     
     private enum DragMode {
