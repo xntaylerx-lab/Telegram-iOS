@@ -35,3 +35,7 @@ python3 build-system/Make/Make.py --cacheDir="$HOME/telegram-bazel-cache" build 
 Как запускать: оба симулятора — с аргументом `--ui-test` (отправитель через XcodeBuildMCP `launch_app_sim` с `launchArgs`, получатель через `xcrun simctl launch <udid> ph.telegra.Telegraph --ui-test`).
 Открытый вопрос на M1: нужна ли маленькая правка, чтобы тестовый логин не стирался при каждом запуске (`AppDelegate.swift` удаляет `telegram-ui-tests-data` при старте с `--ui-test`).
 Реальные аккаунты понадобятся не раньше M3, для проверки вида сообщения в обычном Telegram.
+
+### Заметка к D-006 (2026-10-12, вечер). Тестовые серверы отвергают фиксированный код
+Факт: с нашим api_id `auth.sendCode` на test DC проходит (сервер отвечает `sentCodeTypeSms(length: 5)`, миграция между DC1–DC3 работает), но `auth.signIn` с кодом `XXXXX` возвращает `400: PHONE_CODE_INVALID` на всех трёх DC. Проверено через экран входа и через headless-путь репозитория (`--ui-test --delete-test-account <номер>`, без push-токена) — результат одинаковый. Собственный UI-тест репозитория (`Telegram/Tests/Sources/UITests.swift`) использует тот же сценарий с api_id команды Telegram. Единственная оставшаяся переменная — наш api_id. Логи приложения содержат api_hash открытым текстом: не пересылать их никому.
+Статус: открыто. Варианты: проверить «Test configuration» для приложения на my.telegram.org/apps; попробовать повторную отправку кода звонком; откатиться на реальные аккаунты (риск описан в D-006).
