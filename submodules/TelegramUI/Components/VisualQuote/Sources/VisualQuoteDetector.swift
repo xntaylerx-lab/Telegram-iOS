@@ -89,7 +89,7 @@ public final class VisualQuoteDetector {
     }
     
     /// A square area around the point, about a fifth of the shorter side of the image.
-    private static func pointRegion(at point: CGPoint, imageSize: CGSize) -> VisualQuoteRegion {
+    public static func pointRegion(at point: CGPoint, imageSize: CGSize) -> VisualQuoteRegion {
         let side = min(imageSize.width, imageSize.height) * 0.2
         let width = min(1.0, side / max(1.0, imageSize.width))
         let height = min(1.0, side / max(1.0, imageSize.height))
