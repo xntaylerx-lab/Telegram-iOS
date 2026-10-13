@@ -1368,10 +1368,10 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     private func visualQuoteReplyPressed() {
-        guard let message = self.message, let _ = self.visualQuoteRegion else {
+        guard let message = self.message, let region = self.visualQuoteRegion else {
             return
         }
-        // The selected region reaches the composer with the next milestone; for now this mirrors the "Reply" action of the "more" menu.
+        // Mirrors the "Reply" action of the "more" menu; the region rides along as the reply's inner subject.
         let context = self.context
         let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: message.id.peerId))
         |> deliverOnMainQueue).start(next: { [weak self] peer in
@@ -1379,7 +1379,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                 return
             }
             self.beginCustomDismiss(.simpleAnimation)
-            context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(message.id), highlight: ChatControllerSubject.MessageHighlight(quote: nil, subject: nil), timecode: nil, setupReply: true)))
+            context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(message.id), highlight: ChatControllerSubject.MessageHighlight(quote: nil, subject: region.innerSubject), timecode: nil, setupReply: true)))
             Queue.mainQueue().after(0.3) {
                 self.completeCustomDismiss(false)
             }

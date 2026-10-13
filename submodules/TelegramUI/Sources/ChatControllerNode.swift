@@ -5,6 +5,7 @@ import Postbox
 import SwiftSignalKit
 import Display
 import TelegramCore
+import VisualQuote
 import TelegramPresentationData
 import TelegramUIPreferences
 import TextFormat
@@ -5282,14 +5283,28 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                     messages.append(.message(text: "", attributes: attributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: self.chatLocation.threadId, replyToMessageId: self.chatPresentationInterfaceState.interfaceState.replyMessageSubject?.subjectModel, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets))
                 } else {
                 do {
+                    // A reply to a photo detail: the region rides along on the first text chunk (see VisualQuoteTransport).
+                    var visualQuoteRegion = VisualQuoteRegion(innerSubject: self.chatPresentationInterfaceState.interfaceState.replyMessageSubject?.innerSubject)
+                    var replyToMessageId = self.chatPresentationInterfaceState.interfaceState.replyMessageSubject?.subjectModel
+                    if visualQuoteRegion != nil, let subject = replyToMessageId {
+                        replyToMessageId = EngineMessageReplySubject(messageId: subject.messageId, quote: subject.quote, innerSubject: nil)
+                    }
                     for text in breakChatInputText(trimChatInputText(inputText)) {
                         if text.length != 0 {
                             var attributes: [MessageAttribute] = []
-                            let entities: [MessageTextEntity]
+                            var messageText = text.string
+                            var entities: [MessageTextEntity]
                             if case let .customChatContents(customChatContents) = self.chatPresentationInterfaceState.subject, case .businessLinkSetup = customChatContents.kind {
                                 entities = generateChatInputTextEntities(text, generateLinks: false)
                             } else {
                                 entities = generateTextEntities(text.string, enabledTypes: .all, currentEntities: generateChatInputTextEntities(text, maxAnimatedEmojisInText: 0))
+                            }
+                            if let region = visualQuoteRegion {
+                                visualQuoteRegion = nil
+                                (messageText, entities) = VisualQuoteTransport.attach(region, toText: messageText, entities: entities)
+                                if self.chatPresentationInterfaceState.urlPreview == nil {
+                                    attributes.append(OutgoingContentInfoMessageAttribute(flags: [.disableLinkPreviews]))
+                                }
                             }
                             if !entities.isEmpty {
                                 attributes.append(TextEntitiesMessageAttribute(entities: entities))
@@ -5318,7 +5333,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                                 bubbleUpEmojiOrStickersets.removeAll()
                             }
                             
-                            messages.append(.message(text: text.string, attributes: attributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: self.chatLocation.threadId, replyToMessageId: self.chatPresentationInterfaceState.interfaceState.replyMessageSubject?.subjectModel, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets))
+                            messages.append(.message(text: messageText, attributes: attributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: self.chatLocation.threadId, replyToMessageId: replyToMessageId, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets))
                             mediaReference = nil
                         }
                     }

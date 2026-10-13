@@ -15,6 +15,7 @@ import PhotoResources
 import TextFormat
 import CompositeTextNode
 import ChatInterfaceState
+import VisualQuote
 
 private func generateCloseIcon() -> UIImage {
     return generateImage(CGSize(width: 12.0, height: 12.0), contextGenerator: { size, context in
@@ -284,6 +285,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
         private var contentDisposable: Disposable?
         
         private var inlineTextStarImage: UIImage?
+        private var visualQuoteCropView: VisualQuoteCropView?
         private var inlineTextTonImage: (UIImage, UIColor)?
         
         public var transitionData: ChatInputAccessoryPanelTransitionData? {
@@ -629,7 +631,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     if case .todoItem = reply.innerSubject {
                         let string = environment.strings.Chat_ReplyPanel_ReplyToTodoItem
                         titleText = [.text(NSAttributedString(string: string, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor))]
-                    } else if case .pollOption = reply.innerSubject {
+                    } else if case .pollOption = reply.innerSubject, VisualQuoteRegion(innerSubject: reply.innerSubject) == nil {
                         let string = environment.strings.Chat_ReplyPanel_ReplyToPollOption
                         titleText = [.text(NSAttributedString(string: string, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor))]
                     } else if let _ = reply.quote {
@@ -913,8 +915,29 @@ public final class ChatInputMessageAccessoryPanel: Component {
             
             let textInsets = UIEdgeInsets(top: 10.0, left: 8.0, bottom: 0.0, right: 44.0)
             
+            // A reply to a photo detail shows the selected fragment before the text.
+            var contentLeftInset = lineFrame.maxX + textInsets.left
+            if case let .reply(reply) = component.contents, let region = VisualQuoteRegion(innerSubject: reply.innerSubject), let message = self.messages.first {
+                let cropView: VisualQuoteCropView
+                if let current = self.visualQuoteCropView {
+                    cropView = current
+                } else {
+                    cropView = VisualQuoteCropView(frame: CGRect())
+                    cropView.layer.cornerRadius = 6.0
+                    self.visualQuoteCropView = cropView
+                    self.addSubview(cropView)
+                }
+                let cropSize = CGSize(width: 36.0, height: 36.0)
+                transition.setFrame(view: cropView, frame: CGRect(origin: CGPoint(x: contentLeftInset, y: floor((size.height - cropSize.height) / 2.0)), size: cropSize))
+                cropView.update(context: component.context, message: message, region: region)
+                contentLeftInset += cropSize.width + 8.0
+            } else if let cropView = self.visualQuoteCropView {
+                self.visualQuoteCropView = nil
+                cropView.removeFromSuperview()
+            }
+            
             self.titleNode.components = titleText
-            let titleSize = self.titleNode.update(constrainedSize: CGSize(width: availableSize.width - lineFrame.maxX - textInsets.left - textInsets.right, height: 100.0))
+            let titleSize = self.titleNode.update(constrainedSize: CGSize(width: availableSize.width - contentLeftInset - textInsets.right, height: 100.0))
             
             let textRenderInsets = UIEdgeInsets(top: 2.0, left: 2.0, bottom: 2.0, right: 2.0)
             let textSize = self.text.update(
@@ -930,7 +953,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     handleSpoilers: true
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - lineFrame.maxX - textInsets.left - textInsets.right, height: 100.0)
+                containerSize: CGSize(width: availableSize.width - contentLeftInset - textInsets.right, height: 100.0)
             )
             let tintTextString = NSMutableAttributedString(attributedString: textString)
             tintTextString.addAttribute(.foregroundColor, value: UIColor.black, range: NSRange(location: 0, length: tintTextString.length))
@@ -947,13 +970,13 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     handleSpoilers: true
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - lineFrame.maxX - textInsets.left - textInsets.right, height: 100.0)
+                containerSize: CGSize(width: availableSize.width - contentLeftInset - textInsets.right, height: 100.0)
             )
             
             let titleTextSpacing: CGFloat = 1.0
             
-            let titleFrame = CGRect(origin: CGPoint(x: lineFrame.maxX + textInsets.left, y: textInsets.top), size: titleSize)
-            let textFrame = CGRect(origin: CGPoint(x: lineFrame.maxX + textInsets.left - textRenderInsets.left, y: titleFrame.maxY + titleTextSpacing - textRenderInsets.top), size: textSize)
+            let titleFrame = CGRect(origin: CGPoint(x: contentLeftInset, y: textInsets.top), size: titleSize)
+            let textFrame = CGRect(origin: CGPoint(x: contentLeftInset - textRenderInsets.left, y: titleFrame.maxY + titleTextSpacing - textRenderInsets.top), size: textSize)
             
             transition.setFrame(view: self.titleNode.view, frame: titleFrame)
             

@@ -43,3 +43,13 @@ When reinstalling a rebuilt app with the same build number, copy the whole `.app
 ## Telegram test servers
 
 Launching with the `--ui-test` argument makes the client use Telegram's test datacenters and an isolated data directory that is wiped on every launch. Test phone numbers are `+999 66X YYYY` and the login code is the DC digit `X` repeated five times (see `docs/ui-testing.md`).
+
+## How the region travels (prototype vs. production)
+
+A visual quote is a normal reply to the photo message plus the selected region: the touch point and a rectangle, both normalized to `0...1` relative to the original image.
+
+The Telegram API has no field for an image region in `inputReplyToMessage` / `messageReplyHeader`, and the server drops reply fields it does not expect (we tried `poll_option`: the message is accepted, the field comes back empty). **The prototype therefore carries the region inside the message itself:** a zero-width space is appended to the reply text and tagged with a `textUrl` entity whose URL is `https://example.com/visual-quote#<base64url payload>`; link previews are disabled for the message. Regular Telegram clients show the message as an ordinary reply to the photo (a zero-width glyph has no visible link styling). This is a temporary transport and is documented as such.
+
+**In production** this would be a dedicated reply field next to `todo_item_id` / `poll_option` (for example `quote_region`), serialized by TelegramCore like the other inner-subject fields. The client-side code (gallery selection, composer, bubble header, navigation) would not change: it already models the region as a reply inner subject.
+
+Payload format (`VisualQuoteRegion.encoded()`): ASCII `VQ1`, one byte kind (`1` object, `0` point), then six little-endian Float32: point x, y; rect x, y, width, height.
