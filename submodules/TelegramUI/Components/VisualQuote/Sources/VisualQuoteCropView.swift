@@ -9,14 +9,21 @@ import PhotoResources
 
 /// Shows the selected region of a photo message, cut out of the best representation
 /// available locally (the thumbnail first, the full photo once it is downloaded).
-public final class VisualQuoteCropView: UIImageView {
+/// The whole fragment is fitted inside the view, as in the bubble header (D-026): the rest of the
+/// view shows its background colour, and the fragment keeps rounded corners of its own.
+public final class VisualQuoteCropView: UIView {
+    private let imageView: UIImageView
     private var disposable: Disposable?
     private var currentKey: (EngineMessage.Id, VisualQuoteRegion)?
     
     override public init(frame: CGRect) {
+        self.imageView = UIImageView()
+        self.imageView.contentMode = .scaleAspectFill
+        self.imageView.clipsToBounds = true
+        
         super.init(frame: frame)
-        self.contentMode = .scaleAspectFill
         self.clipsToBounds = true
+        self.addSubview(self.imageView)
     }
     
     required init?(coder: NSCoder) {
@@ -27,13 +34,25 @@ public final class VisualQuoteCropView: UIImageView {
         self.disposable?.dispose()
     }
     
+    override public func layoutSubviews() {
+        super.layoutSubviews()
+        
+        let bounds = self.bounds
+        var fittedSize = bounds.size
+        if let image = self.imageView.image, image.size.width > 0.0, image.size.height > 0.0 {
+            fittedSize = image.size.aspectFitted(bounds.size)
+        }
+        self.imageView.frame = CGRect(origin: CGPoint(x: floor(bounds.midX - fittedSize.width / 2.0), y: floor(bounds.midY - fittedSize.height / 2.0)), size: CGSize(width: ceil(fittedSize.width), height: ceil(fittedSize.height)))
+        self.imageView.layer.cornerRadius = min(self.layer.cornerRadius, min(fittedSize.width, fittedSize.height) / 2.0)
+    }
+    
     public func update(context: AccountContext, message: EngineMessage, region: VisualQuoteRegion) {
         if let currentKey = self.currentKey, currentKey.0 == message.id, currentKey.1 == region {
             return
         }
         self.currentKey = (message.id, region)
         self.disposable?.dispose()
-        self.image = nil
+        self.imageView.image = nil
         
         guard let image = message.media.first(where: { $0 is TelegramMediaImage }) as? TelegramMediaImage, let representation = largestRepresentationForPhoto(image) else {
             return
@@ -60,7 +79,8 @@ public final class VisualQuoteCropView: UIImageView {
             guard let self, let image else {
                 return
             }
-            self.image = image
+            self.imageView.image = image
+            self.setNeedsLayout()
         })
     }
 }

@@ -87,12 +87,16 @@ public func visualQuoteCropImage(postbox: Postbox, message: Message, photo: Tele
                 }
             }
             
+            var cornerRadius: CGFloat = 0.0
+            if case let .Corner(radius) = arguments.corners.topLeft {
+                cornerRadius = radius
+            }
             context.withFlippedContext { c in
                 // Clip to the rounded shape instead of `addCorners`: that helper multiplies the colour of
                 // semi-transparent pixels by their alpha once more, which darkened the corners of the
                 // placeholder bands around a fragment.
-                if case let .Corner(radius) = arguments.corners.topLeft, radius > 0.0 {
-                    c.addPath(UIBezierPath(roundedRect: drawingRect, cornerRadius: radius).cgPath)
+                if cornerRadius > 0.0 {
+                    c.addPath(UIBezierPath(roundedRect: drawingRect, cornerRadius: cornerRadius).cgPath)
                     c.clip()
                 }
                 c.setBlendMode(.copy)
@@ -110,6 +114,12 @@ public func visualQuoteCropImage(postbox: Postbox, message: Message, photo: Tele
                         fittedSize = imageSize.aspectFilled(drawingRect.size)
                     }
                     let fittedRect = CGRect(origin: CGPoint(x: drawingRect.midX - fittedSize.width / 2.0, y: drawingRect.midY - fittedSize.height / 2.0), size: fittedSize)
+                    if cornerRadius > 0.0 {
+                        // When the fragment sits inside placeholder bands, round its own corners too, like the
+                        // thumbnail's; when it fills the box this is the same shape as the clip above.
+                        c.addPath(UIBezierPath(roundedRect: fittedRect, cornerRadius: min(cornerRadius, min(fittedRect.width, fittedRect.height) / 2.0)).cgPath)
+                        c.clip()
+                    }
                     c.interpolationQuality = .medium
                     c.draw(cropped, in: fittedRect)
                 } else {

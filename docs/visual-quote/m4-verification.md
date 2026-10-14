@@ -27,9 +27,7 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 - Minimum-width selection: a 44 pt wide, about 270 pt tall strip is delivered; the header shows it whole with placeholder fill on both sides (D-026) and the gallery opens zoomed to it (`screenshots/m4/50`, `51`).
 - Opening a region at the top or bottom edge of the photo, or a tall strip, places it between the gallery's top buttons and bottom toolbar (D-029, `screenshots/m4/53`, `54`, `56`); after dragging the photo down and back up to its limit it reaches the bottom of the screen with no dark band, so the extra room is gone (`55`, `57`).
 
-## Observed, not changed (for Nika)
-
-- The 36 pt thumbnail in the composer's reply panel (D-013) is aspect-filled, so a narrow strip shows only its middle (`49`), while the bubble header shows the whole strip.
+- The composer's reply panel shows the whole fragment in its 36 pt square, and a fragment inside placeholder bands keeps rounded corners of its own, in the panel and in the bubble header (D-030, `screenshots/m4/58`, `59`).
 
 ## Still open
 

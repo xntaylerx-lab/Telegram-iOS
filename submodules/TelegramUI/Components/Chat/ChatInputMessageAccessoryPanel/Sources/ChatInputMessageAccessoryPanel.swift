@@ -927,6 +927,8 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     self.visualQuoteCropView = cropView
                     self.addSubview(cropView)
                 }
+                // The square around a fragment that is not square shows the placeholder colour, as in the bubble header.
+                cropView.backgroundColor = environment.theme.chat.inputPanel.primaryTextColor.withAlphaComponent(0.1)
                 let cropSize = CGSize(width: 36.0, height: 36.0)
                 transition.setFrame(view: cropView, frame: CGRect(origin: CGPoint(x: contentLeftInset, y: floor((size.height - cropSize.height) / 2.0)), size: cropSize))
                 cropView.update(context: component.context, message: message, region: region)
