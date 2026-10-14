@@ -1,22 +1,51 @@
 # Visual Quote prototype
 
-Prototype of "Visual Quote": replying to a specific detail of a received photo inside the official Telegram-iOS client, the same way a text quote replies to a fragment of text.
+Prototype of "Visual Quote" inside the official Telegram-iOS client: replying to a specific detail of a received photo the same way a text quote replies to a fragment of text. The recipient sees that detail in the reply header and one tap takes them to it in the original photo.
 
-Work in progress. This file will grow with each milestone; for now it records how to build and run the simulator build.
+This is a prototype on the `visual-quote` branch. Everything below says plainly which parts work for real and which are temporary.
+
+## The flow
+
+1. Open a photo in the full-screen gallery and hold a finger on a detail.
+2. A frame appears around it. Object separation suggests the frame around the object under the finger; when there is no confident object, the frame goes around the touch point. The rest of the photo is dimmed.
+3. Adjust the frame: drag a corner to resize it, drag inside it to move it. Two fingers still zoom and pan the photo while the frame stays on the same part of it. Holding a finger elsewhere selects another detail; tapping outside clears the selection.
+4. Tap **Reply**. The gallery closes, the chat's reply panel shows the selected fragment and the title "Reply to Quote from <name>", and the keyboard opens. Type the comment, or dictate it with the keyboard's dictation button.
+5. The message is sent as an ordinary reply to the photo, with the region attached (see "How the region travels").
+6. Both sides see the fragment in the reply header, styled like a text quote: sender colour, bar, name, quote icon, then the fragment instead of the quoted text.
+7. Tapping the header opens the original photo zoomed to the region. Everything around the region is dimmed, the region has a thin outline, and the highlight follows zooming and scrolling until the gallery closes.
+
+The feature sits behind a Debug Settings switch, "Visual Quote" (`ExperimentalUISettings.visualQuote`), which is on by default in this build. To open Debug Settings in a signed-in app, tap the Settings tab icon ten times quickly.
 
 ## Requirements (verified 2026-10-12)
 
 - macOS 26, Xcode 26.6 (the version pinned in `versions.json`), iOS 26.5 simulator runtime.
-- Xcode's **Metal Toolchain** component. It is not installed with Xcode 26 by default and the build fails in `MetalCompile` without it:
+- Xcode's **Metal Toolchain** component. Xcode 26 does not install it by default, and without it the build fails in `MetalCompile`. Installing it is a 688 MB download:
   ```sh
   xcodebuild -downloadComponent MetalToolchain
   ```
-- Python 3, ~20 GB of free disk space (clone, Bazel cache and outputs).
-- A build configuration JSON (see `build-system/template_minimal_development_configuration.json`) with your own `api_id` / `api_hash` from https://my.telegram.org/apps. Keep it outside the repository.
+- Python 3 and about 20 GB of free disk space for the clone, the Bazel cache and the build outputs.
+- Your own `api_id` / `api_hash` from https://my.telegram.org/apps.
 
-## Simulator build without a developer account
+## Build from scratch
 
-Code signing is not needed in the simulator. The build uses the fake profiles shipped in `build-system/fake-codesigning`. Those profiles are issued for `team_id = C67CF9S4VU` and `bundle_id = ph.telegra.Telegraph`, and `Make.py` only picks profiles whose `application-identifier` equals `<team_id>.<bundle_id>`, so the configuration JSON must use exactly these two values.
+### 1. Clone
+
+Clone into a path without spaces. Bazel and the build scripts break on spaces, so `~/Developer` works but `~/Documents/Telegram contest` does not.
+
+```sh
+mkdir -p ~/Developer && cd ~/Developer
+git clone --recursive https://github.com/TelegramMessenger/Telegram-iOS.git
+cd Telegram-iOS
+git checkout visual-quote   # the prototype branch; it exists only in the author's local clone
+```
+
+### 2. Build configuration
+
+Copy `build-system/template_minimal_development_configuration.json` to a file **outside the repository**, for example `~/Developer/telegram-config/build-config.json`, and fill in `api_id` and `api_hash`. Never commit this file or print its keys.
+
+The simulator build needs no developer account. It signs with the fake profiles shipped in `build-system/fake-codesigning`. Those profiles are issued for `team_id = C67CF9S4VU` and `bundle_id = ph.telegra.Telegraph`, and `Make.py` only picks profiles whose `application-identifier` equals `<team_id>.<bundle_id>`. So the configuration must use exactly these two values.
+
+### 3. Build
 
 From the repository root:
 
@@ -27,9 +56,11 @@ python3 build-system/Make/Make.py --cacheDir="$HOME/telegram-bazel-cache" build 
   --buildNumber=1 --configuration=debug_sim_arm64
 ```
 
-A clean build takes about 10 minutes on an M1 Pro. The result is `bazel-bin/Telegram/Telegram.ipa`.
+A clean build takes about 10 minutes on an M1 Pro, an incremental one a few minutes. The result is `bazel-bin/Telegram/Telegram.ipa`. There is no partial build of single modules: every change is checked with a full build.
 
-## Install and run in the simulator
+### 4. Install and run in the simulator
+
+First install:
 
 ```sh
 STAGE=$(mktemp -d)
@@ -38,33 +69,84 @@ xcrun simctl install booted "$STAGE/Payload/Telegram.app"
 xcrun simctl launch booted ph.telegra.Telegraph
 ```
 
-When reinstalling a rebuilt app with the same build number, copy the whole `.app` over the installed bundle instead of `simctl install` (see the repository `CLAUDE.md`, "Updating the running simulator after a rebuild").
+After a rebuild with the same build number, `simctl install` silently keeps the old binary. Instead, copy the whole fresh `.app` over the installed bundle; the login survives because the data container is separate. The recipe is in the repository `CLAUDE.md`, under "Updating the running simulator after a rebuild".
 
-## Telegram test servers
+Sign in with a real account. Telegram's test servers (`--ui-test`) reject the fixed login code for our `api_id` (decisions D-006, D-007), so the prototype was developed on real accounts.
 
-Launching with the `--ui-test` argument makes the client use Telegram's test datacenters and an isolated data directory that is wiped on every launch. Test phone numbers are `+999 66X YYYY` and the login code is the DC digit `X` repeated five times (see `docs/ui-testing.md`).
-
-## How the region travels (prototype vs. production)
-
-A visual quote is a normal reply to the photo message plus the selected region: the touch point and a rectangle, both normalized to `0...1` relative to the original image.
-
-The Telegram API has no field for an image region in `inputReplyToMessage` / `messageReplyHeader`, and the server drops reply fields it does not expect (we tried `poll_option`: the message is accepted, the field comes back empty). **The prototype therefore carries the region inside the message itself:** a zero-width space is prepended to the reply text and tagged with a `textUrl` entity whose URL is `https://example.com/visual-quote#<base64url payload>`; link previews are disabled for the message. Regular Telegram clients show the message as an ordinary reply to the photo: the zero-width glyph has no visible link styling. The marker must be the *first* character: CoreText drops a trailing zero-width space from the glyph run and reports caret offset 0 for its index, so in themes where links are underlined (link colour equals text colour, e.g. the default dark theme) a trailing marker produced an underline across the whole line. Our client also leaves the entity out of text rendering and VoiceOver, and opens the gallery instead of the URL. Our client also strips the marker while a visual reply is being edited and re-attaches the region on save, so edits keep the quote. Known limits: editing the message in a stock client lets its composer extend the link onto the neighbouring word or drop it together with the region, and a tap exactly on the marker in a stock client opens the placeholder URL. This is a temporary transport and is documented as such.
-
-**In production** this would be a dedicated reply field next to `todo_item_id` / `poll_option` (for example `quote_region`), serialized by TelegramCore like the other inner-subject fields. The client-side code (gallery selection, composer, bubble header, navigation) would not change: it already models the region as a reply inner subject.
-
-Payload format (`VisualQuoteRegion.encoded()`): ASCII `VQ1`, one byte kind (`1` object, `0` point), then six little-endian Float32: point x, y; rect x, y, width, height.
-
-## Current verification status (2026-10-13)
-
-M4 remains in progress. The current fragment size is 8 title-line heights, and opening a
-quote centers the region with persistent dimming and a thin outline (variant B, approved by Nika on 2026-10-13). Development uses real accounts without `--ui-test`; test-DC
-sign-in with our configuration failed, as recorded in decisions D-006/D-007.
-
-Run the isolated region codec regression checks from the repository root:
+### 5. Regression checks
 
 ```sh
 python3 docs/visual-quote/tools/test-region-codec.py
 ```
 
-See [M4 verification](m4-verification.md) for completed checks, test limitations, and the
-interactive cases still needed before closing M4.
+This compiles the region, codec and transport sources with stubs and runs 4081 checks: round trips, edge and corner regions, Float32 rounding at the image edge, malformed payloads, and the presentation filter for the transport entity.
+
+## What is real and what is temporary
+
+**Works for real, in the real client:**
+- Selection in the gallery: long press, an editable frame styled after Telegram's photo crop, a Reply button built from the gallery's own glass controls, light haptics (the same impact the context menu uses), and zooming the photo while the frame is active.
+- Object suggestion uses the client's own object separation (`ImageObjectSeparation`, the one the sticker editor uses). On a device that is Vision subject lifting. In the simulator it is a CoreML fallback model (`u2netp`) that the client downloads on first use; it finds one salient object per photo, and a touch outside it gives a frame around the point. **Per-object suggestions on a device were not tested: the prototype never ran on an iPhone.** The frame can always be adjusted by hand, and only the rectangle is sent, so sender and recipient see exactly the same area either way.
+- The message is a normal reply to the photo. The image is never sent again: the recipient's client cuts the fragment out of the original that is already in the chat, the same way a text quote refers to the text of the original message. Until the full photo is downloaded the fragment comes from the thumbnail (blurred), and it turns sharp once the photo loads.
+- The bubble header, the reply panel over the composer, tap-to-open with zoom, VoiceOver labels, light and dark themes, other chat themes, and incoming and outgoing bubbles.
+- Edge cases: regions at any edge or corner of the photo, strips of minimum width, an original far outside the loaded chat history, an original that was deleted (the header disappears like any reply to a deleted message), and editing a sent visual reply (the region is kept).
+- Stock Telegram shows the message as an ordinary reply to the photo. This was checked on a phone in the dark theme.
+
+**Temporary (prototype only):**
+- **The transport of the region.** See the next section. This is the one thing that cannot ship as it is.
+- The "Visual Quote" Debug Settings switch is on by default.
+- One new string, `VisualQuote.VoiceOver.SelectedArea`, exists only in English. Other languages fall back to English. Everything else reuses existing localized strings.
+
+**Not verified:**
+- A visual reply as an **incoming** bubble in a private or group chat. Only one account was available. Incoming rendering was checked in a broadcast channel, where Telegram shows the owner's own posts as incoming.
+- Running on a physical iPhone, which needs signing with an Apple ID.
+
+## How the region travels (prototype vs. production)
+
+A visual quote is a normal reply to the photo message plus the selected region: the touch point and a rectangle, both normalized to `0...1` relative to the original image, so they do not depend on the preview or original resolution.
+
+The Telegram API has no field for an image region in `inputReplyToMessage` / `messageReplyHeader`, and the server drops reply fields it does not expect. We tried `poll_option`: the message was accepted, but the field came back empty.
+
+**The prototype therefore carries the region inside the message itself.**
+- **The marker.** A zero-width space is prepended to the reply text and tagged with a `textUrl` entity. Its URL is `https://example.com/visual-quote#<base64url payload>`, and link previews are disabled for the message. `example.com` is reserved for documentation and leads nowhere.
+- **What stock clients see.** An ordinary reply to the photo: the zero-width glyph has no visible link styling.
+- **Why the marker is first.** CoreText drops a trailing zero-width space from the glyph run. In themes where link colour equals text colour (e.g. the default dark theme), a trailing marker underlined the whole line.
+- **What our client does.** It leaves the entity out of text rendering and VoiceOver, and opens the gallery instead of the URL. While a visual reply is being edited, it strips the marker and re-attaches the region on save.
+
+**Known limits of this transport:**
+- Editing the message in a stock client lets its composer extend the link onto the neighbouring word, or drop the link together with the region.
+- In a stock client, a tap exactly on the zero-width marker opens the placeholder URL.
+
+**In production** this would be a dedicated reply field next to `todo_item_id` / `poll_option` in `inputReplyToMessage` and `messageReplyHeader`, for example `quote_region`, serialized by TelegramCore like the other inner-subject fields. The client-side code (gallery selection, composer, bubble header, navigation) would not change: it already models the region as a reply inner subject (`EngineMessageReplyInnerSubject`). Locally the region rides in `.pollOption(bytes)` from the gallery to the composer, and only at send time is it moved into the text marker.
+
+Payload format (`VisualQuoteRegion.encoded()`): ASCII `VQ1`, one byte for the kind (`1` object, `0` point), then six little-endian Float32: point x, y, then rect x, y, width, height.
+
+## Where the code is
+
+New code lives in its own module, `submodules/TelegramUI/Components/VisualQuote`:
+
+| File | Role |
+| --- | --- |
+| `VisualQuoteRegion.swift`, `VisualQuoteCodec.swift` | the region model and its `VQ1` encoding |
+| `VisualQuoteTransport.swift` | the temporary text-marker transport: attach, detach, read, presentation filter |
+| `VisualQuoteDetector.swift` | object suggestion via `ImageObjectSeparation` |
+| `VisualQuoteFrameNode.swift`, `VisualQuoteShapes.swift` | the editable frame and the passive highlight |
+| `VisualQuoteReplyButtonNode.swift` | the gallery Reply button |
+| `VisualQuoteCropImage.swift`, `VisualQuoteCropView.swift` | the fragment in the bubble header and in the reply panel |
+
+Existing files only get thin integration points:
+- the gallery: `ChatImageGalleryItem.swift`, plus a long-press hook in `ZoomableContentGalleryItemNode.swift`;
+- the reply panel: `ChatInputMessageAccessoryPanel.swift`;
+- the bubble header: `ChatMessageReplyInfoNode.swift`;
+- opening a quote and VoiceOver: `ChatMessageBubbleItemNode.swift`;
+- keeping the marker out of the visible text: `ChatMessageTextBubbleContentNode.swift`;
+- send and edit: `ChatControllerNode.swift`, `ChatControllerLoadDisplayNode.swift`, `ChatControllerNavigateToMessage.swift` and `ChatController.swift`;
+- the gallery subject: `GalleryController.swift` in AccountContext and `GalleryData.swift`;
+- the flag: `ExperimentalUISettings.swift` and `DebugController.swift`.
+
+TelegramCore is untouched.
+
+## Further reading
+
+- [decisions.md](decisions.md): every decision with its reason, D-001 to D-032.
+- [code-map.md](code-map.md): how the relevant parts of Telegram-iOS work (M1).
+- [m4-verification.md](m4-verification.md): what was checked on the recipient's side, with screenshot references.
