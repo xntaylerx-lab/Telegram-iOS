@@ -79,7 +79,7 @@ Sign in with a real account. Telegram's test servers (`--ui-test`) reject the fi
 python3 docs/visual-quote/tools/test-region-codec.py
 ```
 
-This compiles the region, codec and transport sources with stubs and runs 4081 checks: round trips, edge and corner regions, Float32 rounding at the image edge, malformed payloads, and the presentation filter for the transport entity.
+This compiles the region, codec and transport sources with stubs and runs about 4,000 checks: round trips, edge and corner regions, Float32 rounding at the image edge, malformed payloads, and the presentation filter for the transport entity.
 
 ## What is real and what is temporary
 
