@@ -594,7 +594,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     
                     if let icon {
                         let rawString: PresentationStrings.FormattedString
-                        if reply.quote != nil {
+                        if reply.quote != nil || VisualQuoteRegion(innerSubject: reply.innerSubject) != nil {
                             rawString = environment.strings.Chat_ReplyPanel_ReplyToQuoteBy(peer.debugDisplayTitle)
                         } else {
                             rawString = environment.strings.Chat_ReplyPanel_ReplyTo(peer.debugDisplayTitle)
@@ -634,7 +634,8 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     } else if case .pollOption = reply.innerSubject, VisualQuoteRegion(innerSubject: reply.innerSubject) == nil {
                         let string = environment.strings.Chat_ReplyPanel_ReplyToPollOption
                         titleText = [.text(NSAttributedString(string: string, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor))]
-                    } else if let _ = reply.quote {
+                    } else if reply.quote != nil || VisualQuoteRegion(innerSubject: reply.innerSubject) != nil {
+                        // A visual quote is titled like a text quote (D-031).
                         let string = environment.strings.Chat_ReplyPanel_ReplyToQuoteBy(authorName).string
                         titleText = [.text(NSAttributedString(string: string, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor))]
                     } else {
