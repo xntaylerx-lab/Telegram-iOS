@@ -9,7 +9,7 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 
 ## Verified in the simulator
 
-- Opening a quote zooms to the region, centers it on screen and keeps the dim plus outline (variant B); the highlight follows pinch and double-tap zoom.
+- Opening a quote zooms to the region as close to the middle as the photo allows (no empty space beyond its edge, D-028) and keeps the dim plus outline (variant B); the highlight follows pinch and double-tap zoom.
 - A region touching the top-left corner and one touching the bottom edge are encoded, delivered to the second simulator and opened centered.
 - A full-width strip of minimum height (44 pt) is delivered and opened correctly. Since D-026 the header shows it whole (aspect-shaped thumbnail, short side at least a quarter, fitted when clamped).
 - On a freshly signed-in device the header first shows a blurred crop from the thumbnail; after the app reconnected and the photo loaded, the crop became sharp.

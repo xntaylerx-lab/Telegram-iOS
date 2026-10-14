@@ -246,7 +246,6 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private var visualQuotePreviousPanMinimumTouches: Int?
     private var visualQuoteReplyButton: VisualQuoteReplyButtonNode?
     private var visualQuoteHighlightNode: VisualQuoteFrameNode?
-    private var visualQuoteCenteringInset: UIEdgeInsets?
     private var visualQuoteRegion: VisualQuoteRegion?
     private var visualQuoteDetectionId: Int = 0
     
@@ -1262,20 +1261,11 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         let viewSize = scrollView.bounds.size
         let scale = min(scrollView.maximumZoomScale, max(scrollView.minimumZoomScale, min(viewSize.width / max(1.0, padded.width), viewSize.height / max(1.0, padded.height))))
         
-        // Put the fragment in the middle of the screen. Near an edge the scroll view would clamp the
-        // offset at the photo's border, so the missing room is added as a content inset; it is taken
-        // away again as soon as the user scrolls or zooms (see the delegate callbacks below).
-        let zoomedSize = CGSize(width: contentBounds.width * scale, height: contentBounds.height * scale)
-        let contentOrigin = CGPoint(x: max(0.0, (viewSize.width - zoomedSize.width) / 2.0), y: max(0.0, (viewSize.height - zoomedSize.height) / 2.0))
-        let desired = CGPoint(x: contentOrigin.x + regionRect.midX * scale - viewSize.width / 2.0, y: contentOrigin.y + regionRect.midY * scale - viewSize.height / 2.0)
-        let maxOffset = CGPoint(x: max(0.0, zoomedSize.width - viewSize.width), y: max(0.0, zoomedSize.height - viewSize.height))
-        let inset = UIEdgeInsets(top: max(0.0, -desired.y), left: max(0.0, -desired.x), bottom: max(0.0, desired.y - maxOffset.y), right: max(0.0, desired.x - maxOffset.x))
-        self.visualQuoteCenteringInset = inset
-        UIView.animate(withDuration: 0.35, delay: 0.0, options: [.curveEaseInOut], animations: {
-            scrollView.zoomScale = scale
-            scrollView.contentInset = inset
-            scrollView.contentOffset = desired
-        })
+        // Zoom so the fragment is as close to the middle as the photo allows: near an edge the scroll
+        // view stops at the photo's border instead of showing empty space beyond it (D-028).
+        let targetSize = CGSize(width: viewSize.width / scale, height: viewSize.height / scale)
+        let target = CGRect(x: regionRect.midX - targetSize.width / 2.0, y: regionRect.midY - targetSize.height / 2.0, width: targetSize.width, height: targetSize.height)
+        scrollView.zoom(to: target, animated: true)
         
         // Dim the photo around the quoted area and keep it that way: the highlight lives inside
         // the zoomable content, so it follows every zoom and scroll until the gallery closes.
@@ -1298,25 +1288,6 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         if self.visualQuoteFrameNode != nil {
             self.updateVisualQuoteLayout(transition: .immediate)
         }
-    }
-    
-    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        self.clearVisualQuoteCenteringInset()
-    }
-    
-    func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
-        self.clearVisualQuoteCenteringInset()
-    }
-    
-    private func clearVisualQuoteCenteringInset() {
-        guard self.visualQuoteCenteringInset != nil else {
-            return
-        }
-        self.visualQuoteCenteringInset = nil
-        let scrollView = self.scrollNode.view
-        UIView.animate(withDuration: 0.25, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
-            scrollView.contentInset = UIEdgeInsets()
-        })
     }
     
     private func updateVisualQuoteHighlightOutline() {
