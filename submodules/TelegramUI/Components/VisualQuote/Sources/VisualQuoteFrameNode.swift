@@ -85,6 +85,7 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
             return
         }
         let panRecognizer = UIPanGestureRecognizer(target: self, action: #selector(self.panGesture(_:)))
+        panRecognizer.maximumNumberOfTouches = 1
         panRecognizer.delegate = self
         self.view.addGestureRecognizer(panRecognizer)
     }

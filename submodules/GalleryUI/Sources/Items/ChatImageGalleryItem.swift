@@ -243,6 +243,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private var tilingNode: TilingNode?
     
     private var visualQuoteFrameNode: VisualQuoteFrameNode?
+    private var visualQuotePreviousPanMinimumTouches: Int?
     private var visualQuoteReplyButton: VisualQuoteReplyButtonNode?
     private var visualQuoteHighlightNode: VisualQuoteFrameNode?
     private var visualQuoteCenteringInset: UIEdgeInsets?
@@ -1290,6 +1291,13 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     override func scrollViewDidZoom(_ scrollView: UIScrollView) {
         super.scrollViewDidZoom(scrollView)
         self.updateVisualQuoteHighlightOutline()
+        self.updateVisualQuoteLayout(transition: .immediate)
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if self.visualQuoteFrameNode != nil {
+            self.updateVisualQuoteLayout(transition: .immediate)
+        }
     }
     
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -1369,13 +1377,14 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                 self?.updateVisualQuoteReplyButton(transition: .animated(duration: 0.3, curve: .spring))
             }
             self.visualQuoteFrameNode = frameNode
-            self.addSubnode(frameNode)
+            // Keep the overlay under the scroll view so its pinch recognizer sees touches
+            // that start inside the selection. One finger edits; two fingers move the photo.
+            self.scrollNode.addSubnode(frameNode)
             isNew = true
-            // The frame is adjusted by dragging, so zooming and panning the photo pause while it is shown.
-            self.scrollNode.view.pinchGestureRecognizer?.isEnabled = false
-            self.scrollNode.view.isScrollEnabled = false
+            self.visualQuotePreviousPanMinimumTouches = self.scrollNode.view.panGestureRecognizer.minimumNumberOfTouches
+            self.scrollNode.view.panGestureRecognizer.minimumNumberOfTouches = 2
         }
-        frameNode.frame = self.bounds
+        frameNode.frame = self.scrollNode.view.bounds
         frameNode.update(imageFrame: self.visualQuoteImageFrame, visibleBounds: self.bounds.insetBy(dx: 0.0, dy: 0.0), region: region, animated: animated && !isNew)
         if isNew && animated {
             frameNode.animateIn()
@@ -1388,7 +1397,10 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.visualQuoteRegion = nil
         if let frameNode = self.visualQuoteFrameNode {
             self.visualQuoteFrameNode = nil
-            self.scrollNode.view.pinchGestureRecognizer?.isEnabled = true
+            if let minimumTouches = self.visualQuotePreviousPanMinimumTouches {
+                self.scrollNode.view.panGestureRecognizer.minimumNumberOfTouches = minimumTouches
+                self.visualQuotePreviousPanMinimumTouches = nil
+            }
             self.scrollNode.view.isScrollEnabled = !self.scrollNode.view.zoomScale.isEqual(to: self.scrollNode.view.minimumZoomScale)
             if animated {
                 frameNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak frameNode] _ in
@@ -1403,7 +1415,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     
     private func updateVisualQuoteLayout(transition: ContainedViewLayoutTransition) {
         if let frameNode = self.visualQuoteFrameNode, let region = self.visualQuoteRegion {
-            frameNode.frame = self.bounds
+            frameNode.frame = self.scrollNode.view.bounds
             frameNode.update(imageFrame: self.visualQuoteImageFrame, visibleBounds: self.bounds, region: region, animated: false)
         }
         self.updateVisualQuoteReplyButton(transition: transition)
