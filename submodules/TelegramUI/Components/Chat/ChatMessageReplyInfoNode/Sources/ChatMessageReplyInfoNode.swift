@@ -702,7 +702,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             var imageBoundingSize = CGSize(width: imageSide, height: imageSide)
             if let imageDimensions = imageDimensions {
                 if visualQuote != nil {
-                    imageBoundingSize = VisualQuoteLayout.replyThumbnailSize(fragmentSize: imageDimensions, side: imageSide)
+                    imageBoundingSize = VisualQuoteLayout.replyThumbnailSize(fragmentSize: imageDimensions, side: imageSide, maximumWidth: arguments.constrainedSize.width - 8.0 - 9.0 - 6.0)
                 }
                 let boundingSize = imageBoundingSize
                 if visualQuote == nil {

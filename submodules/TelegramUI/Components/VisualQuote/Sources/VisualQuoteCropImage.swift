@@ -23,8 +23,10 @@ public enum VisualQuoteLayout {
     }
     public static let replyThumbnailStyle: ReplyThumbnailStyle = .aspect
     
-    /// The thumbnail box for a fragment of `fragmentSize` pixels when the usual square side is `side`.
-    public static func replyThumbnailSize(fragmentSize: CGSize, side: CGFloat) -> CGSize {
+    /// The thumbnail box for a fragment of `fragmentSize` pixels when the usual square side is `side` and the
+    /// header can be up to `maximumWidth` wide. A landscape fragment grows in width (like a long text quote
+    /// takes the whole bubble width) while its height stays within `side`; a portrait one keeps `side` as height.
+    public static func replyThumbnailSize(fragmentSize: CGSize, side: CGFloat, maximumWidth: CGFloat) -> CGSize {
         switch replyThumbnailStyle {
         case .squareFill, .squareFit:
             return CGSize(width: side, height: side)
@@ -34,7 +36,8 @@ public enum VisualQuoteLayout {
                 return CGSize(width: side, height: side)
             }
             if fragmentSize.width >= fragmentSize.height {
-                return CGSize(width: side, height: max(minimumShortSide, floor(side * fragmentSize.height / fragmentSize.width)))
+                let width = min(max(side, maximumWidth), floor(side * fragmentSize.width / fragmentSize.height))
+                return CGSize(width: width, height: max(minimumShortSide, min(side, floor(width * fragmentSize.height / fragmentSize.width))))
             } else {
                 return CGSize(width: max(minimumShortSide, floor(side * fragmentSize.width / fragmentSize.height)), height: side)
             }
