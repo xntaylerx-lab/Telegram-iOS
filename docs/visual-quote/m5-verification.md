@@ -19,7 +19,7 @@ Checked by hand in Nika's test channel with the prototype build (`screenshots/m5
 
 The commands from the README were run on the existing clone:
 - `python3 build-system/Make/Make.py clean` (`bazel clean --expunge`, which removes all build outputs);
-- then the README build command, with a new, empty `--cacheDir` (`~/telegram-bazel-cache-fresh`).
+- then the README build command, with a new, empty `--cacheDir` (`~/telegram-bazel-cache-fresh`, deleted after the check).
 
 Result: `Build completed successfully, 7737 total actions` in 8 min 42 s on the M1 Pro. The `.ipa` from this build was installed by copying the whole `.app` and launched in both simulators, and the existing login survived.
 
