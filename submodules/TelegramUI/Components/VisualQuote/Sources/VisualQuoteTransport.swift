@@ -56,6 +56,36 @@ public enum VisualQuoteTransport {
         return (marker + text, [MessageTextEntity(range: 0 ..< markerLength, type: .TextUrl(url: url(for: region)))] + shifted)
     }
     
+    /// Removes the marker and its entity from a message's text for editing, shifting the other
+    /// entities back. Works for the marker at either end (older messages carried it last). The
+    /// region itself is read from the original message again and re-attached when the edit is saved.
+    public static func detach(text: String, entities: [MessageTextEntity]) -> (text: String, entities: [MessageTextEntity]) {
+        guard let index = entities.firstIndex(where: { entity in
+            if case let .TextUrl(url) = entity.type, region(fromUrl: url) != nil {
+                return true
+            }
+            return false
+        }) else {
+            return (text, entities)
+        }
+        let nsText = text as NSString
+        let markerLength = (marker as NSString).length
+        var remaining = entities
+        remaining.remove(at: index)
+        let markerLocation = entities[index].range.lowerBound
+        guard markerLocation >= 0, markerLocation + markerLength <= nsText.length, nsText.substring(with: NSRange(location: markerLocation, length: markerLength)) == marker else {
+            return (text, remaining)
+        }
+        let strippedText = nsText.replacingCharacters(in: NSRange(location: markerLocation, length: markerLength), with: "")
+        let shifted = remaining.map { entity -> MessageTextEntity in
+            if entity.range.lowerBound >= markerLocation + markerLength {
+                return MessageTextEntity(range: (entity.range.lowerBound - markerLength) ..< (entity.range.upperBound - markerLength), type: entity.type)
+            }
+            return entity
+        }
+        return (strippedText, shifted)
+    }
+    
     /// Excludes decoded metadata from text styling and link hit testing without changing
     /// the stored entities used to reconstruct the quote. Keep all UTF-16 offsets intact.
     public static func visibleEntities(_ entities: [MessageTextEntity]) -> [MessageTextEntity] {

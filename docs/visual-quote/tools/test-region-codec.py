@@ -100,6 +100,17 @@ check(VisualQuoteTransport.visibleEntities([malformed]) == [malformed], "do not 
 check(VisualQuoteTransport.visibleEntities([]).isEmpty, "empty entities")
 check(VisualQuoteTransport.region(in: Message(textEntitiesAttribute: TextEntitiesMessageAttribute(entities: attached.entities))) != nil, "stored metadata still decodes after filtering")
 check(attached.entities.count == 3, "presentation filtering does not mutate storage")
+let detached = VisualQuoteTransport.detach(text: attached.text, entities: attached.entities)
+check(detached.text == originalText && detached.entities == originalEntities, "detach restores the editable text and entities")
+let legacyText = originalText + VisualQuoteTransport.marker
+let legacyEntities = originalEntities + [MessageTextEntity(range: originalText.utf16.count..<(originalText.utf16.count + 1), type: .TextUrl(url: VisualQuoteTransport.url(for: transportRegion)))]
+let legacyDetached = VisualQuoteTransport.detach(text: legacyText, entities: legacyEntities)
+check(legacyDetached.text == originalText && legacyDetached.entities == originalEntities, "detach handles the trailing marker of older messages")
+let plain = VisualQuoteTransport.detach(text: originalText, entities: originalEntities)
+check(plain.text == originalText && plain.entities == originalEntities, "detach leaves ordinary messages alone")
+let movedEntities = originalEntities + [MessageTextEntity(range: 2..<4, type: .TextUrl(url: VisualQuoteTransport.url(for: transportRegion)))]
+let moved = VisualQuoteTransport.detach(text: originalText, entities: movedEntities)
+check(moved.text == originalText && moved.entities == originalEntities, "detach drops a displaced transport entity without touching the text")
 print("PASS: \(checks) region codec and transport checks")
 ''')
 with tempfile.TemporaryDirectory(prefix='visual-quote-codec-') as temp:

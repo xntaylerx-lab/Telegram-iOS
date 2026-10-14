@@ -5,6 +5,7 @@ import SwiftSignalKit
 import Display
 import AsyncDisplayKit
 import TelegramCore
+import VisualQuote
 import SafariServices
 import MobileCoreServices
 import Intents
@@ -1786,7 +1787,9 @@ extension ChatControllerImpl {
                                 let content = chatInputContent(fromInstantPage: richTextAttribute.instantPage)
                                 editInputState = ChatTextInputState(content: content, selectionRange: content.length ..< content.length)
                             } else {
-                                let inputText = chatInputStateStringWithAppliedEntities(message.text, entities: entities)
+                                // Visual Quote: edit the visible text only; the region is re-attached when the edit is saved.
+                                let editSource = VisualQuoteTransport.detach(text: message.text, entities: entities)
+                                let inputText = chatInputStateStringWithAppliedEntities(editSource.text, entities: editSource.entities)
                                 editInputState = ChatTextInputState(inputText: inputText)
                             }
                             var disableUrlPreviews: [String] = []
@@ -2221,7 +2224,13 @@ extension ChatControllerImpl {
                 let content = editMessage.inputState.content
                 let richText: RichTextMessageAttribute? = content.isEntityExpressible() ? nil : RichTextMessageAttribute(instantPage: instantPage(from: content), fullInstantPage: nil)
 
-                let entities = generateTextEntities(text.string, enabledTypes: .all, currentEntities: generateChatInputTextEntities(text))
+                var entities = generateTextEntities(text.string, enabledTypes: .all, currentEntities: generateChatInputTextEntities(text))
+                var messageText = text.string
+                // Visual Quote: the editor worked on the visible text only; put the region back on the edited text.
+                if let region = VisualQuoteTransport.region(in: message._asMessage()) {
+                    (messageText, entities) = VisualQuoteTransport.attach(region, toText: messageText, entities: entities)
+                    disableUrlPreview = true
+                }
                 var entitiesAttribute: TextEntitiesMessageAttribute?
                 if !entities.isEmpty {
                     entitiesAttribute = TextEntitiesMessageAttribute(entities: entities)
@@ -2305,8 +2314,8 @@ extension ChatControllerImpl {
                             let currentRichText = currentMessage.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute
 
                             do {
-                                if currentMessage.text != text.string || currentEntities != entities || currentRichText != nil || richText != nil || updatingMedia || webpagePreviewAttribute != currentWebpagePreviewAttribute || disableUrlPreview {
-                                    strongSelf.context.account.pendingUpdateMessageManager.add(messageId: editMessage.messageId, text: richText != nil ? "" : text.string, media: media, entities: richText != nil ? nil : entitiesAttribute, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, invertMediaAttribute: invertedMediaAttribute, disableUrlPreview: disableUrlPreview)
+                                if currentMessage.text != messageText || currentEntities != entities || currentRichText != nil || richText != nil || updatingMedia || webpagePreviewAttribute != currentWebpagePreviewAttribute || disableUrlPreview {
+                                    strongSelf.context.account.pendingUpdateMessageManager.add(messageId: editMessage.messageId, text: richText != nil ? "" : messageText, media: media, entities: richText != nil ? nil : entitiesAttribute, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, invertMediaAttribute: invertedMediaAttribute, disableUrlPreview: disableUrlPreview)
                                 }
                             }
                         }
@@ -4530,7 +4539,9 @@ extension ChatControllerImpl {
                         }
                     }
                     
-                    let inputText = chatInputStateStringWithAppliedEntities(message.text, entities: entities)
+                    // Visual Quote: edit the visible text only; the region is re-attached when the edit is saved.
+                    let editSource = VisualQuoteTransport.detach(text: message.text, entities: entities)
+                    let inputText = chatInputStateStringWithAppliedEntities(editSource.text, entities: editSource.entities)
                     var disableUrlPreviews: [String] = []
                     if webpageUrl == nil {
                         disableUrlPreviews = detectUrls(inputText)

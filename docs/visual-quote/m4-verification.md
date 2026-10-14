@@ -16,7 +16,7 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 - Deleting the original: the reply header disappears, exactly as for any reply to a deleted message in Telegram (D-022). No crash, no stale crop, no browser navigation.
 - VoiceOver activation of a visual reply opens the gallery on the region instead of the hidden transport link in Safari.
 - The transport entity no longer underlines the message text. Root cause (CoreText caret offset 0 for a trailing zero-width space) and the fix (marker first) are in D-023; verified in the dark theme with the presentation filter switched off, i.e. the way a stock client renders it (`screenshots/m4/16`).
-- Editing a sent visual reply keeps the region. The composer extends the link onto the neighbouring word, so after an edit that word looks like a link (D-023).
+- Editing a sent visual reply keeps the region: the marker is stripped in the editor and re-attached on save (D-024). Checked on a message with the leading marker and on an older one with the trailing marker.
 
 ## Still open
 
