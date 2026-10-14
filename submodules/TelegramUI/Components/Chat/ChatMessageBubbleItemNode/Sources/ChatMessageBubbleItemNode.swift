@@ -961,6 +961,22 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             }
             
             if let singleUrl = accessibilityData.singleUrl {
+                // The invisible transport entity is metadata, not a web link for VoiceOver.
+                if let region = VisualQuoteTransport.region(fromUrl: singleUrl) {
+                    guard let item = strongSelf.item else {
+                        return false
+                    }
+                    for attribute in item.message.attributes {
+                        if let attribute = attribute as? ReplyMessageAttribute {
+                            if let replyMessage = item.message.associatedMessages[attribute.messageId], replyMessage.media.contains(where: { $0 is TelegramMediaImage }), item.controllerInteraction.openMessage(replyMessage, OpenMessageParams(mode: .default, mediaSubject: region.galleryMediaSubject)) {
+                                return true
+                            }
+                            item.controllerInteraction.navigateToMessage(item.message.id, attribute.messageId, NavigateToMessageParams(timestamp: nil, quote: nil, subject: attribute.innerSubject, progress: nil))
+                            return true
+                        }
+                    }
+                    return false
+                }
                 strongSelf.item?.controllerInteraction.openUrl(ChatControllerInteraction.OpenUrl(url: singleUrl, concealed: false, external: false, message: strongSelf.item?.content.firstMessage))
                 return true
             }
@@ -5777,7 +5793,11 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         
         self.messageAccessibilityArea.accessibilityLabel = accessibilityData.label
         self.messageAccessibilityArea.accessibilityValue = accessibilityData.value
-        self.messageAccessibilityArea.accessibilityHint = accessibilityData.hint
+        if let singleUrl = accessibilityData.singleUrl, VisualQuoteTransport.region(fromUrl: singleUrl) != nil {
+            self.messageAccessibilityArea.accessibilityHint = self.item?.presentationData.strings.VoiceOver_Chat_OpenHint
+        } else {
+            self.messageAccessibilityArea.accessibilityHint = accessibilityData.hint
+        }
         self.messageAccessibilityArea.accessibilityTraits = accessibilityData.traits
         if let customActions = accessibilityData.customActions {
             self.messageAccessibilityArea.accessibilityCustomActions = customActions.map({ action -> UIAccessibilityCustomAction in

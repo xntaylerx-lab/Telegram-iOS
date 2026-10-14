@@ -8,8 +8,8 @@ import Postbox
 /// The reply header has no field for an image region, and the server drops unknown reply data
 /// (it silently discards `poll_option` on a reply to a photo). So the prototype appends a
 /// zero-width space to the message text and gives it a `TextUrl` entity whose URL holds the
-/// encoded region; link previews are disabled for the message. Regular clients show nothing:
-/// a zero-width glyph has no visible link styling. In production this would be a dedicated
+/// encoded region; link previews are disabled for the message. Our own client leaves this
+/// entity out of text rendering (`visibleEntities`). In production this would be a dedicated
 /// reply field next to `todo_item_id` / `poll_option`; see the README.
 public enum VisualQuoteTransport {
     /// The invisible character the entity is attached to.
@@ -48,6 +48,17 @@ public enum VisualQuoteTransport {
         return (text + marker, entities + [MessageTextEntity(range: start ..< end, type: .TextUrl(url: url(for: region)))])
     }
     
+    /// Excludes decoded metadata from text styling and link hit testing without changing
+    /// the stored entities used to reconstruct the quote. Keep all UTF-16 offsets intact.
+    public static func visibleEntities(_ entities: [MessageTextEntity]) -> [MessageTextEntity] {
+        return entities.filter { entity in
+            if case let .TextUrl(url) = entity.type, region(fromUrl: url) != nil {
+                return false
+            }
+            return true
+        }
+    }
+
     /// The region carried by a message, if any.
     public static func region(in message: Message) -> VisualQuoteRegion? {
         guard let entities = message.textEntitiesAttribute?.entities else {

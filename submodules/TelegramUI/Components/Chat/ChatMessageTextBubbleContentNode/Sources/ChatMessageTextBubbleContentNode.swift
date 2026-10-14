@@ -29,6 +29,7 @@ import InteractiveTextComponent
 import ShimmeringMask
 import StreamingTextReveal
 import WalletContext
+import VisualQuote
 
 private final class CachedChatMessageText {
     let text: String
@@ -441,6 +442,11 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                 }
                 
                 
+                // Region metadata must not become a visible or tappable text link.
+                if let entities = messageEntities {
+                    messageEntities = VisualQuoteTransport.visibleEntities(entities)
+                }
+
                 if incoming && item.associatedData.isSuspiciousPeer, let entities = messageEntities {
                     messageEntities = entities.filter { entity in
                         switch entity.type {
