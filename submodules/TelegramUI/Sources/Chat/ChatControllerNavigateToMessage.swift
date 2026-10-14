@@ -393,12 +393,16 @@ extension ChatControllerImpl {
                 } else {
                     var setupReply = false
                     var quote: (string: String, offset: Int?)?
+                    // The reply's inner subject (e.g. a Visual Quote region) must survive this path too,
+                    // otherwise a reply set up on a message outside the loaded history loses it.
+                    var replySubject: EngineMessageReplyInnerSubject?
                     if case let .id(messageId, params) = messageLocation {
                         if params.timestamp != nil {
                             self.scheduledScrollToMessageId = (messageId, params)
                         }
                         quote = params.quote.flatMap { ($0.string, $0.offset) }
                         setupReply = params.setupReply
+                        replySubject = params.subject
                     }
                     var progress: Promise<Bool>?
                     if case let .id(_, params) = messageLocation {
@@ -495,7 +499,7 @@ extension ChatControllerImpl {
                     }
                     |> deliverOnMainQueue).startStrict(next: { [weak self] index in
                         if let strongSelf = self, let index = index.0 {
-                            strongSelf.chatDisplayNode.historyNode.scrollToMessage(from: scrollFromIndex, to: index, animated: animated, quote: quote, scrollPosition: scrollPosition, setupReply: setupReply)
+                            strongSelf.chatDisplayNode.historyNode.scrollToMessage(from: scrollFromIndex, to: index, animated: animated, quote: quote, subject: replySubject, scrollPosition: scrollPosition, setupReply: setupReply)
                         } else if index.1 {
                             if !progressStarted {
                                 progressStarted = true
