@@ -1,3 +1,5 @@
+> **Visual Quote prototype.** This clone carries the `visual-quote` branch: replying to a detail of a received photo the way a text quote replies to a fragment of text. Everything about it, including how to build and what is real versus temporary, is in [docs/visual-quote/README.md](docs/visual-quote/README.md). The rest of this file is Telegram's original compilation guide.
+
 # Telegram iOS Source Code Compilation Guide
 
 We welcome all developers to use our API and source code to create applications on our platform.
