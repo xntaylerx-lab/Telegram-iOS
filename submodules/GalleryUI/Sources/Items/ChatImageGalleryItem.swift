@@ -246,6 +246,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private var visualQuotePreviousPanMinimumTouches: Int?
     private var visualQuoteReplyButton: VisualQuoteReplyButtonNode?
     private var visualQuoteHighlightNode: VisualQuoteFrameNode?
+    private var visualQuoteControlsInset: UIEdgeInsets?
+    private var visualQuoteNavigationBarHeight: CGFloat = 0.0
+    private var visualQuoteLayoutSize: CGSize?
     private var visualQuoteRegion: VisualQuoteRegion?
     private var visualQuoteDetectionId: Int = 0
     
@@ -370,6 +373,13 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         transition.updateFrame(node: self.statusNodeContainer, frame: CGRect(origin: CGPoint(x: floor((layout.size.width - statusSize.width) / 2.0), y: floor((layout.size.height - statusSize.height) / 2.0)), size: statusSize))
         transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(), size: statusSize))
         
+        self.visualQuoteNavigationBarHeight = navigationBarHeight
+        if self.visualQuoteControlsInset != nil && self.visualQuoteLayoutSize != layout.size {
+            // The zoom was reset for the new size, so the room made for the controls is no longer right.
+            self.visualQuoteControlsInset = nil
+            self.scrollNode.view.contentInset = UIEdgeInsets()
+        }
+        self.visualQuoteLayoutSize = layout.size
         self.updateVisualQuoteLayout(transition: transition)
     }
     
@@ -1259,13 +1269,55 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         // Leave room around the fragment and keep the aspect ratio of the screen.
         let padded = regionRect.insetBy(dx: -regionRect.width * 0.35, dy: -regionRect.height * 0.35)
         let viewSize = scrollView.bounds.size
-        let scale = min(scrollView.maximumZoomScale, max(scrollView.minimumZoomScale, min(viewSize.width / max(1.0, padded.width), viewSize.height / max(1.0, padded.height))))
         
-        // Zoom so the fragment is as close to the middle as the photo allows: near an edge the scroll
-        // view stops at the photo's border instead of showing empty space beyond it (D-028).
-        let targetSize = CGSize(width: viewSize.width / scale, height: viewSize.height / scale)
-        let target = CGRect(x: regionRect.midX - targetSize.width / 2.0, y: regionRect.midY - targetSize.height / 2.0, width: targetSize.width, height: targetSize.height)
-        scrollView.zoom(to: target, animated: true)
+        // The gallery's top buttons and bottom toolbar float over the photo; the fragment should end up between them.
+        let gap: CGFloat = 8.0
+        var controlsTop: CGFloat = 0.0
+        var controlsBottom: CGFloat = 0.0
+        if self.controlsVisibility() {
+            controlsTop = self.visualQuoteNavigationBarHeight
+            if self.footerContentNode.supernode != nil && !self.footerContentNode.bounds.isEmpty {
+                let footerFrame = self.footerContentNode.view.convert(self.footerContentNode.bounds, to: self.view)
+                controlsBottom = max(0.0, viewSize.height - footerFrame.minY)
+            }
+        }
+        let freeTop = controlsTop > 0.0 ? controlsTop + gap : 0.0
+        let freeBottom = viewSize.height - (controlsBottom > 0.0 ? controlsBottom + gap : 0.0)
+        
+        var scale = min(viewSize.width / max(1.0, padded.width), viewSize.height / max(1.0, padded.height))
+        // A tall fragment is zoomed a little less so it fits between the controls.
+        scale = min(scale, (freeBottom - freeTop) / max(1.0, regionRect.height))
+        scale = min(scrollView.maximumZoomScale, max(scrollView.minimumZoomScale, scale))
+        
+        // Put the fragment as close to the middle as the photo allows, the way zoom(to:) does: near an
+        // edge the view stops at the photo's border (D-028). Only if that leaves the fragment under the
+        // top buttons or the bottom toolbar, shift the photo just enough to clear them; the missing room
+        // becomes a content inset, which goes away once the user scrolls or zooms (D-029).
+        let zoomedSize = CGSize(width: contentBounds.width * scale, height: contentBounds.height * scale)
+        let originY = zoomedSize.height < viewSize.height ? (viewSize.height - zoomedSize.height) / 2.0 : 0.0
+        var offset = CGPoint()
+        if zoomedSize.width > viewSize.width {
+            offset.x = max(0.0, min(zoomedSize.width - viewSize.width, regionRect.midX * scale - viewSize.width / 2.0))
+        }
+        if zoomedSize.height > viewSize.height {
+            offset.y = max(0.0, min(zoomedSize.height - viewSize.height, regionRect.midY * scale - viewSize.height / 2.0))
+        }
+        let regionTop = originY + regionRect.minY * scale - offset.y
+        let regionBottom = originY + regionRect.maxY * scale - offset.y
+        if regionBottom - regionTop <= freeBottom - freeTop {
+            if regionTop < freeTop {
+                offset.y -= freeTop - regionTop
+            } else if regionBottom > freeBottom {
+                offset.y += regionBottom - freeBottom
+            }
+        }
+        let inset = UIEdgeInsets(top: max(0.0, -offset.y), left: 0.0, bottom: max(0.0, offset.y - (zoomedSize.height - viewSize.height)), right: 0.0)
+        self.visualQuoteControlsInset = inset == UIEdgeInsets() ? nil : inset
+        UIView.animate(withDuration: 0.35, delay: 0.0, options: [.curveEaseInOut], animations: {
+            scrollView.zoomScale = scale
+            scrollView.contentInset = inset
+            scrollView.contentOffset = offset
+        })
         
         // Dim the photo around the quoted area and keep it that way: the highlight lives inside
         // the zoomable content, so it follows every zoom and scroll until the gallery closes.
@@ -1288,6 +1340,25 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         if self.visualQuoteFrameNode != nil {
             self.updateVisualQuoteLayout(transition: .immediate)
         }
+    }
+    
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        self.clearVisualQuoteControlsInset()
+    }
+    
+    func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
+        self.clearVisualQuoteControlsInset()
+    }
+    
+    private func clearVisualQuoteControlsInset() {
+        guard self.visualQuoteControlsInset != nil else {
+            return
+        }
+        self.visualQuoteControlsInset = nil
+        let scrollView = self.scrollNode.view
+        UIView.animate(withDuration: 0.25, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
+            scrollView.contentInset = UIEdgeInsets()
+        })
     }
     
     private func updateVisualQuoteHighlightOutline() {
