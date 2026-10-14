@@ -48,8 +48,23 @@ Launching with the `--ui-test` argument makes the client use Telegram's test dat
 
 A visual quote is a normal reply to the photo message plus the selected region: the touch point and a rectangle, both normalized to `0...1` relative to the original image.
 
-The Telegram API has no field for an image region in `inputReplyToMessage` / `messageReplyHeader`, and the server drops reply fields it does not expect (we tried `poll_option`: the message is accepted, the field comes back empty). **The prototype therefore carries the region inside the message itself:** a zero-width space is appended to the reply text and tagged with a `textUrl` entity whose URL is `https://example.com/visual-quote#<base64url payload>`; link previews are disabled for the message. Regular Telegram clients show the message as an ordinary reply to the photo (a zero-width glyph has no visible link styling). This is a temporary transport and is documented as such.
+The Telegram API has no field for an image region in `inputReplyToMessage` / `messageReplyHeader`, and the server drops reply fields it does not expect (we tried `poll_option`: the message is accepted, the field comes back empty). **The prototype therefore carries the region inside the message itself:** a zero-width space is prepended to the reply text and tagged with a `textUrl` entity whose URL is `https://example.com/visual-quote#<base64url payload>`; link previews are disabled for the message. Regular Telegram clients show the message as an ordinary reply to the photo: the zero-width glyph has no visible link styling. The marker must be the *first* character: CoreText drops a trailing zero-width space from the glyph run and reports caret offset 0 for its index, so in themes where links are underlined (link colour equals text colour, e.g. the default dark theme) a trailing marker produced an underline across the whole line. Our client also leaves the entity out of text rendering and VoiceOver, and opens the gallery instead of the URL. Known limits: editing the message in any client lets the composer extend the link onto the neighbouring word, and a tap exactly on the marker in a stock client opens the placeholder URL. This is a temporary transport and is documented as such.
 
 **In production** this would be a dedicated reply field next to `todo_item_id` / `poll_option` (for example `quote_region`), serialized by TelegramCore like the other inner-subject fields. The client-side code (gallery selection, composer, bubble header, navigation) would not change: it already models the region as a reply inner subject.
 
 Payload format (`VisualQuoteRegion.encoded()`): ASCII `VQ1`, one byte kind (`1` object, `0` point), then six little-endian Float32: point x, y; rect x, y, width, height.
+
+## Current verification status (2026-10-13)
+
+M4 remains in progress. The current fragment size is 8 title-line heights, and opening a
+quote centers the region with persistent dimming and a thin outline (variant B, approved by Nika on 2026-10-13). Development uses real accounts without `--ui-test`; test-DC
+sign-in with our configuration failed, as recorded in decisions D-006/D-007.
+
+Run the isolated region codec regression checks from the repository root:
+
+```sh
+python3 docs/visual-quote/tools/test-region-codec.py
+```
+
+See [M4 verification](m4-verification.md) for completed checks, test limitations, and the
+interactive cases still needed before closing M4.

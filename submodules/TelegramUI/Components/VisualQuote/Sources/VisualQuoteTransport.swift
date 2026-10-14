@@ -6,11 +6,11 @@ import Postbox
 /// Carries a region on a regular reply message without a schema change.
 ///
 /// The reply header has no field for an image region, and the server drops unknown reply data
-/// (it silently discards `poll_option` on a reply to a photo). So the prototype appends a
+/// (it silently discards `poll_option` on a reply to a photo). So the prototype prepends a
 /// zero-width space to the message text and gives it a `TextUrl` entity whose URL holds the
-/// encoded region; link previews are disabled for the message. Our own client leaves this
-/// entity out of text rendering (`visibleEntities`). In production this would be a dedicated
-/// reply field next to `todo_item_id` / `poll_option`; see the README.
+/// encoded region; link previews are disabled for the message. Our own client additionally
+/// leaves this entity out of text rendering (`visibleEntities`). In production this would be a
+/// dedicated reply field next to `todo_item_id` / `poll_option`; see the README.
 public enum VisualQuoteTransport {
     /// The invisible character the entity is attached to.
     public static let marker: String = "\u{200B}"
@@ -41,11 +41,19 @@ public enum VisualQuoteTransport {
         return VisualQuoteRegion(encoded: data)
     }
     
-    /// Appends the marker and its entity to an outgoing text. Entity ranges are UTF-16 offsets.
+    /// Prepends the marker and its entity to an outgoing text; the other entities shift right by
+    /// the marker's length. Entity ranges are UTF-16 offsets.
+    ///
+    /// The marker is the first character on purpose. CoreText drops a trailing zero-width space
+    /// from the glyph run and reports caret offset 0 for its index, so a link underline on a
+    /// trailing marker stretches across the whole line (seen in stock Telegram in themes where
+    /// links are underlined). For a leading marker both caret offsets are 0 and nothing is drawn.
     public static func attach(_ region: VisualQuoteRegion, toText text: String, entities: [MessageTextEntity]) -> (text: String, entities: [MessageTextEntity]) {
-        let start = (text as NSString).length
-        let end = start + (marker as NSString).length
-        return (text + marker, entities + [MessageTextEntity(range: start ..< end, type: .TextUrl(url: url(for: region)))])
+        let markerLength = (marker as NSString).length
+        let shifted = entities.map { entity in
+            MessageTextEntity(range: (entity.range.lowerBound + markerLength) ..< (entity.range.upperBound + markerLength), type: entity.type)
+        }
+        return (marker + text, [MessageTextEntity(range: 0 ..< markerLength, type: .TextUrl(url: url(for: region)))] + shifted)
     }
     
     /// Excludes decoded metadata from text styling and link hit testing without changing
