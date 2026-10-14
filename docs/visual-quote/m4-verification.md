@@ -15,12 +15,12 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 - On a freshly signed-in device the header first shows a blurred crop from the thumbnail; after the app reconnected and the photo loaded, the crop became sharp.
 - Deleting the original: the reply header disappears, exactly as for any reply to a deleted message in Telegram (D-022). No crash, no stale crop, no browser navigation.
 - VoiceOver activation of a visual reply opens the gallery on the region instead of the hidden transport link in Safari.
+- Confirmed by Nika on her phone in stock Telegram, dark theme: a visual reply with the leading marker shows no underline and no link colour (2026-10-13).
 - The transport entity no longer underlines the message text. Root cause (CoreText caret offset 0 for a trailing zero-width space) and the fix (marker first) are in D-023; verified in the dark theme with the presentation filter switched off, i.e. the way a stock client renders it (`screenshots/m4/16`).
 - Editing a sent visual reply keeps the region: the marker is stripped in the editor and re-attached on save (D-024). Checked on a message with the leading marker and on an older one with the trailing marker.
 
 ## Still open
 
 - Pinch and two-finger pan while the editable frame is active (D-021): built, not exercised by hand.
-- A look at a new visual reply in stock Telegram on a phone, light and dark theme, to confirm the simulator result.
 - A second account for a real incoming bubble (only one account is available).
 - Narrow (minimum width) selections and the remaining two exact corners.
