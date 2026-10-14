@@ -190,6 +190,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
         let textNodeLayout = TextNodeWithEntities.asyncLayout(maybeNode?.textNode)
         let imageNodeLayout = TransformImageNode.asyncLayout(maybeNode?.imageNode)
         let previousMediaReference = maybeNode?.previousMediaReference
+        let previousVisualQuoteRegion = maybeNode?.previousVisualQuoteRegion
         
         let isQuoteExpanded = maybeNode?.isQuoteExpanded ?? false
         
@@ -729,9 +730,11 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                 mediaUserLocation = .peer(message.id.peerId)
             }
             
-            if let visualQuote, mediaUpdated || maybeNode?.previousVisualQuoteRegion != visualQuote.region {
+            if let visualQuote, mediaUpdated || previousVisualQuoteRegion != visualQuote.region {
                 updateImageSignal = visualQuoteCropImage(postbox: arguments.context.account.postbox, message: visualQuote.message, photo: visualQuote.photo, region: visualQuote.region)
-            } else if let updatedMediaReference = updatedMediaReference, mediaUpdated && imageDimensions != nil {
+            } else if let updatedMediaReference = updatedMediaReference, imageDimensions != nil, mediaUpdated || (visualQuote == nil && previousVisualQuoteRegion != nil) {
+                // Removing a visual quote can keep the same original photo. Restore its regular
+                // thumbnail even when the media reference itself did not change.
                 if let imageReference = updatedMediaReference.concrete(TelegramMediaImage.self) {
                     updateImageSignal = chatMessagePhotoThumbnail(account: arguments.context.account, userLocation: mediaUserLocation, photoReference: imageReference, blurred: hasSpoiler)
                 } else if let fileReference = updatedMediaReference.concrete(TelegramMediaFile.self) {

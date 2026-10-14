@@ -4,10 +4,10 @@ import TelegramCore
 
 /// Transport of a region on the wire for the prototype.
 ///
-/// The reply header has no field for an image region. The prototype carries the region in the
-/// reply's `poll_option` field (an opaque byte string the client already sends and receives as
-/// `EngineMessageReplyInnerSubject.pollOption`), tagged with a magic prefix. In production this
-/// would be a dedicated reply field next to `todo_item_id` / `poll_option`; see the README.
+/// The region uses `EngineMessageReplyInnerSubject.pollOption` only inside the composer.
+/// `VisualQuoteTransport` carries these bytes in a text entity because the server discards
+/// `poll_option` on photo replies. In production this would be a dedicated reply field;
+/// see the README.
 ///
 /// Layout: "VQ1" + kind (1 byte) + six little-endian Float32: point x, y; rect x, y, width, height.
 public extension VisualQuoteRegion {
@@ -29,6 +29,9 @@ public extension VisualQuoteRegion {
             return nil
         }
         let bytes = [UInt8](data)
+        guard bytes[3] == 0 || bytes[3] == 1 else {
+            return nil
+        }
         var values: [CGFloat] = []
         for index in 0 ..< 6 {
             let offset = 4 + index * 4
@@ -43,10 +46,22 @@ public extension VisualQuoteRegion {
         guard rect.width > 0.0, rect.height > 0.0 else {
             return nil
         }
-        self.init(kind: bytes[3] == 1 ? .object : .point, point: CGPoint(x: values[0], y: values[1]), rect: rect)
+        // Independently encoded Float32 origins and sizes can add up to slightly more than 1.
+        // Allow only that rounding error, then clamp it away before cropping or zooming.
+        let tolerance: CGFloat = 0.000001
+        guard values.allSatisfy({ $0 >= -tolerance && $0 <= 1.0 + tolerance }),
+              rect.maxX <= 1.0 + tolerance, rect.maxY <= 1.0 + tolerance else {
+            return nil
+        }
+        let boundedRect = rect.intersection(CGRect(x: 0.0, y: 0.0, width: 1.0, height: 1.0))
+        guard !boundedRect.isNull, boundedRect.width > 0.0, boundedRect.height > 0.0 else {
+            return nil
+        }
+        let point = CGPoint(x: max(0.0, min(1.0, values[0])), y: max(0.0, min(1.0, values[1])))
+        self.init(kind: bytes[3] == 1 ? .object : .point, point: point, rect: boundedRect)
     }
     
-    /// The region as the reply's inner subject for sending.
+    /// The region as the composer's local reply inner subject (not the wire transport).
     var innerSubject: EngineMessageReplyInnerSubject {
         return .pollOption(self.encoded())
     }
