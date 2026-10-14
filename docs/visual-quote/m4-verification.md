@@ -22,7 +22,10 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 - The transport entity no longer underlines the message text. Root cause (CoreText caret offset 0 for a trailing zero-width space) and the fix (marker first) are in D-023; verified in the dark theme with the presentation filter switched off, i.e. the way a stock client renders it (`screenshots/m4/16`).
 - Editing a sent visual reply keeps the region: the marker is stripped in the editor and re-attached on save (D-024). Checked on a message with the leading marker and on an older one with the trailing marker.
 
+- Incoming bubble without a second account: in a broadcast channel Telegram renders the owner's own posts as incoming (`Message.effectivelyIncoming`, `MessageUtils.swift`). A visual reply to a photo in Nika's test channel shows a white incoming bubble with the header in the channel's colour (bar, name, tinted background and quote icon all red, matching the avatar), and tapping it opens the gallery zoomed to the region with the dim and outline. Light theme, default wallpaper (`screenshots/m4/40`-`42`, 2026-10-13).
+
 ## Still open
 
-- A second account for a real incoming bubble (only one account is available).
+- Incoming bubble in the dark theme and on a second chat theme.
+- Incoming bubble in a private or group chat (needs a second account or a bot; the channel covers only the colours).
 - Narrow (minimum width) selections and the remaining two exact corners.
