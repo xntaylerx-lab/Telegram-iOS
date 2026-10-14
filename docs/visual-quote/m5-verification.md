@@ -11,8 +11,8 @@ Checked by hand in Nika's test channel with the prototype build (`screenshots/m5
 
 ## VoiceOver
 
-- The gallery Reply button is announced as `button "Reply"` (runtime accessibility snapshot) and activates the same action as a tap (D-032).
-- The editable frame is labelled "Selected area".
+- The gallery Reply button appears in the runtime accessibility snapshot as `button "Reply"` (before D-032 it was an unnamed button). Its activation calls the same action as a tap; that was checked in code, not with VoiceOver turned on.
+- The editable frame is labelled "Selected area" in code; the snapshot lists only tappable targets, so the label was not seen at runtime.
 - A visual reply in the chat reads as a reply, without the transport URL, and activation opens the gallery on the region (checked in M4).
 
 ## Build from scratch (2026-10-13)
