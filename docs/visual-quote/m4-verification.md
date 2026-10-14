@@ -28,4 +28,5 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 
 - Incoming bubble on a second chat theme or a custom wallpaper.
 - Incoming bubble in a private or group chat (needs a second account or a bot; the channel covers only the colours).
-- Narrow (minimum width) selections and the remaining two exact corners.
+- Top-right corner: sent from the gallery with the frame clamped to the corner; the header shows the corner crop and the gallery opens zoomed to it (`screenshots/m4/45`, `46`). At the top edge the zoomed region sits under the status bar and the gallery's top buttons (stock `zoom(to:)`, D-028); shown to Nika, no change made.
+- Narrow (minimum width) selections and the bottom-left corner.
