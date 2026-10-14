@@ -12,13 +12,25 @@ import GlassControls
 /// other gallery buttons.
 public final class VisualQuoteReplyButtonNode: ASDisplayNode {
     private let buttonView = ComponentView<Empty>()
+    private var action: (() -> Void)?
     
     override public init() {
         super.init()
+        
+        // The glass group draws its title as an image, so VoiceOver gets the label from here.
+        self.isAccessibilityElement = true
+        self.accessibilityTraits = .button
+    }
+    
+    override public func accessibilityActivate() -> Bool {
+        self.action?()
+        return true
     }
     
     /// Lays out the button and returns its size.
     public func update(theme: PresentationTheme, title: String, action: @escaping () -> Void, transition: ContainedViewLayoutTransition) -> CGSize {
+        self.action = action
+        self.accessibilityLabel = title
         let size = self.buttonView.update(
             transition: ComponentTransition(transition),
             component: AnyComponent(GlassControlGroupComponent(

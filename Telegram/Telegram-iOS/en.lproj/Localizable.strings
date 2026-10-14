@@ -17096,3 +17096,5 @@ Error: %8$@";
 "Notification.GramTransfer.UnknownUser" = "UNKNOWN USER";
 
 "Chat.ViewStyle" = "VIEW STYLE";
+
+"VisualQuote.VoiceOver.SelectedArea" = "Selected area";

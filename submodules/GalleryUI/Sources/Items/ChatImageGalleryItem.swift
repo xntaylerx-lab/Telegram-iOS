@@ -1408,6 +1408,8 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         } else {
             self.clearVisualQuoteHighlight()
             frameNode = VisualQuoteFrameNode(region: region)
+            frameNode.isAccessibilityElement = true
+            frameNode.accessibilityLabel = self.presentationData.strings.VisualQuote_VoiceOver_SelectedArea
             frameNode.regionChanged = { [weak self] region in
                 guard let self else {
                     return
