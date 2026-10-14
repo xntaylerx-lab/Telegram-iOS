@@ -869,8 +869,18 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             return true
         }
         
-        let controllerInteraction = ChatControllerInteraction(openMessage: { [weak self] message, params in
-            guard let self, self.isNodeLoaded, let message = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(message.id)?._asMessage() else {
+        let controllerInteraction = ChatControllerInteraction(openMessage: { [weak self] requestedMessage, params in
+            guard let self, self.isNodeLoaded else {
+                return false
+            }
+            let message: Message
+            if let historyMessage = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(requestedMessage.id)?._asMessage() {
+                message = historyMessage
+            } else if case .visualQuoteRegion = params.mediaSubject {
+                // A visual quote opens the quoted photo on its own (standalone gallery), so the original
+                // does not have to be in the loaded history: the reply header's copy of it is enough.
+                message = requestedMessage
+            } else {
                 return false
             }
             
