@@ -20,8 +20,41 @@ public struct MessageTextEntity: Equatable {
     public let type: Kind
     public init(range: Range<Int>, type: Kind) { self.range = range; self.type = type }
 }
-public struct TextEntitiesMessageAttribute { public let entities: [MessageTextEntity] }
+public protocol MessageAttribute {}
+public struct TextEntitiesMessageAttribute: MessageAttribute { public let entities: [MessageTextEntity] }
+public struct RichTextMessageAttribute: MessageAttribute {}
+public struct WebpagePreviewMessageAttribute: MessageAttribute {}
+public struct OutgoingContentInfoFlags: OptionSet {
+    public var rawValue: Int32
+    public init() { self.rawValue = 0 }
+    public init(rawValue: Int32) { self.rawValue = rawValue }
+    public static let disableLinkPreviews = OutgoingContentInfoFlags(rawValue: 1 << 0)
+    public static let other = OutgoingContentInfoFlags(rawValue: 1 << 5)
+}
+public struct OutgoingContentInfoMessageAttribute: MessageAttribute {
+    public let flags: OutgoingContentInfoFlags
+    public init(flags: OutgoingContentInfoFlags) { self.flags = flags }
+}
 public struct Message { public let textEntitiesAttribute: TextEntitiesMessageAttribute? }
+public struct MessageId: Equatable { public let id: Int32 }
+public struct EngineMessageReplySubject: Equatable {
+    public var messageId: MessageId
+    public var quote: String?
+    public var innerSubject: EngineMessageReplyInnerSubject?
+    public init(messageId: MessageId, quote: String?, innerSubject: EngineMessageReplyInnerSubject?) {
+        self.messageId = messageId; self.quote = quote; self.innerSubject = innerSubject
+    }
+}
+extension EngineMessageReplyInnerSubject: Equatable {}
+public struct MediaId: Hashable {}
+public protocol Media {}
+public struct AnyMediaReference {}
+public struct StoryId {}
+public struct ItemCollectionId {}
+public enum EnqueueMessage {
+    case message(text: String, attributes: [MessageAttribute], inlineStickers: [MediaId: Media], mediaReference: AnyMediaReference?, threadId: Int64?, replyToMessageId: EngineMessageReplySubject?, replyToStoryId: StoryId?, localGroupingKey: Int64?, correlationId: Int64?, bubbleUpEmojiOrStickersets: [ItemCollectionId])
+    case forward(source: MessageId)
+}
 """)
 for name in ['VisualQuoteRegion.swift', 'VisualQuoteCodec.swift', 'VisualQuoteTransport.swift']:
     parts.append('\n'.join(line for line in (source / name).read_text().splitlines()
@@ -57,6 +90,92 @@ valid([0.5, 0.5, 0, 0.49, 1, 0.02], "wide region")
 for edge in 1...999 {
     let x = Float32(edge) / 1000
     valid([x, x, x, x, 1 - x, 1 - x], "edge \(edge)")
+}
+
+// Outgoing messages: the region leaves the reply subject and rides in the first text that has room.
+let sampleRegion = VisualQuoteRegion(encoded: payload([0.5, 0.5, 0.25, 0.25, 0.5, 0.5], kind: 1))!
+let subjectWithRegion = EngineMessageReplySubject(messageId: MessageId(id: 7), quote: nil, innerSubject: sampleRegion.innerSubject)
+func outgoing(_ text: String, attributes: [MessageAttribute] = [], media: Bool = false, subject: EngineMessageReplySubject? = subjectWithRegion) -> EnqueueMessage {
+    return .message(text: text, attributes: attributes, inlineStickers: [:], mediaReference: media ? AnyMediaReference() : nil, threadId: nil, replyToMessageId: subject, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+}
+func fields(_ message: EnqueueMessage) -> (text: String, attributes: [MessageAttribute], subject: EngineMessageReplySubject?) {
+    guard case let .message(text, attributes, _, _, _, subject, _, _, _, _) = message else { fatalError("not a message") }
+    return (text, attributes, subject)
+}
+func hasRegion(_ message: EnqueueMessage) -> Bool {
+    let text = fields(message).text
+    guard let attribute = fields(message).attributes.first(where: { $0 is TextEntitiesMessageAttribute }) as? TextEntitiesMessageAttribute else { return false }
+    return text.hasPrefix(VisualQuoteTransport.marker) && attribute.entities.contains(where: { entity in
+        if case let .TextUrl(url) = entity.type { return VisualQuoteTransport.region(fromUrl: url) == sampleRegion }
+        return false
+    })
+}
+func disablesPreviews(_ message: EnqueueMessage) -> Bool {
+    return fields(message).attributes.contains(where: { ($0 as? OutgoingContentInfoMessageAttribute)?.flags.contains(.disableLinkPreviews) == true })
+}
+let limit = 4096
+do {
+    let result = VisualQuoteTransport.applyToOutgoing([outgoing("hello")], textLimit: limit, captionLimit: 1024)
+    check(hasRegion(result[0]), "text message carries the region")
+    check(fields(result[0]).subject?.innerSubject == nil, "text message reply subject is plain")
+    check(fields(result[0]).subject?.messageId == MessageId(id: 7), "text message still replies to the photo")
+    check(disablesPreviews(result[0]), "text message disables link previews")
+}
+do {
+    let result = VisualQuoteTransport.applyToOutgoing([outgoing("", media: true)], textLimit: limit, captionLimit: 1024)
+    check(!hasRegion(result[0]) && fields(result[0]).text == "", "media without a caption stays as it is")
+    check(fields(result[0]).subject?.innerSubject == nil, "media without a caption replies plainly")
+    check(!disablesPreviews(result[0]), "media without a caption gets no preview attribute")
+}
+do {
+    let result = VisualQuoteTransport.applyToOutgoing([outgoing("caption", media: true)], textLimit: limit, captionLimit: 1024)
+    check(hasRegion(result[0]), "media caption carries the region")
+    let long = VisualQuoteTransport.applyToOutgoing([outgoing(String(repeating: "c", count: 1024), media: true)], textLimit: limit, captionLimit: 1024)
+    check(!hasRegion(long[0]) && fields(long[0]).subject?.innerSubject == nil, "caption at its limit has no room")
+}
+do {
+    let result = VisualQuoteTransport.applyToOutgoing([outgoing("first"), outgoing("second")], textLimit: limit, captionLimit: 1024)
+    check(hasRegion(result[0]) && !hasRegion(result[1]), "only the first chunk carries the region")
+    check(fields(result[1]).subject?.innerSubject == nil, "later chunks reply plainly")
+    let full = VisualQuoteTransport.applyToOutgoing([outgoing(String(repeating: "x", count: limit)), outgoing("second")], textLimit: limit, captionLimit: 1024)
+    check(!hasRegion(full[0]) && hasRegion(full[1]), "a full first chunk passes the region on")
+}
+do {
+    let rich = VisualQuoteTransport.applyToOutgoing([outgoing("", attributes: [RichTextMessageAttribute()])], textLimit: limit, captionLimit: 1024)
+    check(!hasRegion(rich[0]) && fields(rich[0]).subject?.innerSubject == nil, "rich message replies plainly")
+    let kept = VisualQuoteTransport.applyToOutgoing([outgoing("link", attributes: [WebpagePreviewMessageAttribute()])], textLimit: limit, captionLimit: 1024)
+    check(hasRegion(kept[0]) && !disablesPreviews(kept[0]), "an explicit preview is kept")
+    let merged = VisualQuoteTransport.applyToOutgoing([outgoing("t", attributes: [OutgoingContentInfoMessageAttribute(flags: [.other])])], textLimit: limit, captionLimit: 1024)
+    let infos = fields(merged[0]).attributes.compactMap { $0 as? OutgoingContentInfoMessageAttribute }
+    check(infos.count == 1 && infos[0].flags.contains(.other) && infos[0].flags.contains(.disableLinkPreviews), "existing content flags are merged")
+    let plain = VisualQuoteTransport.applyToOutgoing([outgoing("t", subject: EngineMessageReplySubject(messageId: MessageId(id: 7), quote: nil, innerSubject: nil)), .forward(source: MessageId(id: 1))], textLimit: limit, captionLimit: 1024)
+    check(!hasRegion(plain[0]) && fields(plain[0]).subject?.messageId == MessageId(id: 7), "a plain reply is untouched")
+    if case .forward = plain[1] {} else { fatalError("FAILED: forwards are untouched") }
+    check(VisualQuoteTransport.withoutRegion(subjectWithRegion)?.innerSubject == nil, "withoutRegion strips the region")
+    check(VisualQuoteTransport.withoutRegion(nil) == nil, "withoutRegion keeps nil")
+}
+// Chunks leave room for the marker in the first message.
+func split(_ text: NSAttributedString) -> [NSAttributedString] {
+    var result: [NSAttributedString] = []
+    var offset = 0
+    while offset < text.length {
+        let length = min(limit, text.length - offset)
+        result.append(text.attributedSubstring(from: NSRange(location: offset, length: length)))
+        offset += length
+    }
+    return result
+}
+do {
+    let short = VisualQuoteTransport.chunks(of: NSAttributedString(string: String(repeating: "a", count: 4000)), limit: limit, split: split)
+    check(short.count == 1 && short[0].length == 4000, "short text is not re-split")
+    let exact = VisualQuoteTransport.chunks(of: NSAttributedString(string: String(repeating: "a", count: limit)), limit: limit, split: split)
+    check(exact.count == 2 && exact[0].length == limit - 1 && exact[1].length == 1, "text at the limit leaves one unit of room")
+    let long = VisualQuoteTransport.chunks(of: NSAttributedString(string: String(repeating: "a", count: 9000)), limit: limit, split: split)
+    check(long.map { $0.length } == [limit - 1, limit, 9000 - (limit - 1) - limit], "long text: first chunk short, the rest as usual")
+    let emoji = NSAttributedString(string: String(repeating: "a", count: limit - 2) + "\u{1F600}" + "b")
+    let kept = VisualQuoteTransport.chunks(of: emoji, limit: limit, split: split)
+    check(kept[0].length == limit - 2 && (kept[0].string as NSString).length == limit - 2, "a surrogate pair is not cut in half")
+    check(kept.map { $0.length }.reduce(0, +) == emoji.length, "nothing is lost when re-splitting")
 }
 let base: [Float32] = [0.5, 0.5, 0.2, 0.2, 0.3, 0.3]
 for index in 0..<6 {

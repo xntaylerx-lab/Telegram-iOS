@@ -24,3 +24,12 @@ The commands from the README were run on the existing clone:
 Result: `Build completed successfully, 7737 total actions` in 8 min 42 s on the M1 Pro. The `.ipa` from this build was installed by copying the whole `.app` and launched in both simulators, and the existing login survived.
 
 Not covered: a fresh `git clone --recursive` and a machine without Xcode, the Metal Toolchain or Bazel's repository download cache. Those steps were done once at M0 (decisions D-001 to D-004).
+
+## Pre-publication review (2026-10-13)
+
+A code review of the whole branch diff (`f1dd7a2dbd..visual-quote`) produced 15 findings; the fixes are summarised in decision D-034. Checked afterwards in the simulator with the rebuilt app (`screenshots/m5/06`-`08`):
+
+- A visual reply sent as plain text still carries the region, now via `transformEnqueueMessages`: the bubble shows the fragment and the reply panel still shows "Reply to Quote from …" with the 36 pt fragment drawn by the shared generator.
+- Selection in the gallery, the Reply button and sending work as before.
+- The codec tool runs 4108 checks, including the outgoing transform (text, caption, media without a caption, rich message, kept link preview, forwards) and the chunking that leaves room for the marker.
+- Cloud drafts: inconclusive, see D-034.

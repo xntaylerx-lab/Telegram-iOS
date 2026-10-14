@@ -1,40 +1,35 @@
 import Foundation
 import UIKit
-import CoreImage
 import SwiftSignalKit
+import TelegramCore
 import AccountContext
 import ImageObjectSeparation
 
 /// Result of looking for an object under the user's finger.
 public enum VisualQuoteDetection {
-    /// An object was found under the point; `mask` is a white-on-black mask of the object in image pixels.
-    case object(region: VisualQuoteRegion, mask: CIImage)
+    /// An object was found under the point; the region's rect is its bounding box.
+    case object(region: VisualQuoteRegion)
     /// Nothing confident under the point.
     case point(region: VisualQuoteRegion)
-    
-    public var region: VisualQuoteRegion {
-        switch self {
-        case let .object(region, _):
-            return region
-        case let .point(region):
-            return region
-        }
-    }
 }
 
 /// Finds the object under a touch point using the same object separation the
 /// sticker editor uses (`ImageObjectSeparation`): Vision subject lifting on
 /// device, a CoreML fallback model in the simulator.
 public final class VisualQuoteDetector {
+    private static var preparedAccountId: AccountRecordId?
     private static var availabilityDisposable: Disposable?
     private static var isAvailable: Bool = false
     
-    /// Makes object separation ready. In the simulator this downloads the
+    /// Makes object separation ready for the given account. In the simulator this downloads the
     /// fallback model once per launch; until it arrives, detection returns `.point`.
     public static func prepare(context: AccountContext) {
-        if self.availabilityDisposable != nil {
+        if self.preparedAccountId == context.account.id {
             return
         }
+        self.preparedAccountId = context.account.id
+        self.isAvailable = false
+        self.availabilityDisposable?.dispose()
         self.availabilityDisposable = (cutoutAvailability(context: context)
         |> deliverOnMainQueue).start(next: { availability in
             if case .available = availability {
@@ -61,7 +56,7 @@ public final class VisualQuoteDetector {
         cutoutImage(from: pixelImage, editedImage: nil, crop: nil, target: .point(normalizedPoint), includeExtracted: false, completion: { results in
             var detection = pointDetection
             for result in results {
-                guard let maskImage = result.maskImage, case let .image(uiImage, ciImage) = maskImage, let cgImage = uiImage.cgImage else {
+                guard let maskImage = result.maskImage, case let .image(uiImage, _) = maskImage, let cgImage = uiImage.cgImage else {
                     continue
                 }
                 guard let bitmap = MaskBitmap(cgImage: cgImage, maxSide: 256) else {
@@ -75,7 +70,7 @@ public final class VisualQuoteDetector {
                 if rect.width < 0.01 || rect.height < 0.01 {
                     continue
                 }
-                detection = .object(region: VisualQuoteRegion(kind: .object, point: normalizedPoint, rect: rect), mask: ciImage)
+                detection = .object(region: VisualQuoteRegion(kind: .object, point: normalizedPoint, rect: rect))
                 break
             }
             Queue.mainQueue().async {

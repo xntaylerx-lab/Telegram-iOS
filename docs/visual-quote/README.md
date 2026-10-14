@@ -113,6 +113,9 @@ The Telegram API has no field for an image region in `inputReplyToMessage` / `me
 - **What our client does.** It leaves the entity out of text rendering and VoiceOver, and opens the gallery instead of the URL. While a visual reply is being edited, it strips the marker and re-attaches the region on save.
 
 **Known limits of this transport:**
+- The region needs text to ride on. A text message or a media caption carries it; a sticker, a photo without a caption, a voice note, a dice, an inline bot result or a rich (markdown) message sent as a visual reply goes out as an ordinary reply to the photo, and so does an edit that turns a visual reply into rich content.
+- A text or caption at its maximum length has no room for the marker; the composer leaves one character of room when it splits text into messages, and the editor's length limit is reduced by one.
+- A cloud draft of a visual reply may lose the region: the composer keeps it in the reply subject's `poll_option`, which the server is known to drop on photo replies. Not verified (Saved Messages, the only chat available on both test devices, does not sync drafts at all).
 - Editing the message in a stock client lets its composer extend the link onto the neighbouring word, or drop the link together with the region.
 - In a stock client, a tap exactly on the zero-width marker opens the placeholder URL.
 
@@ -127,11 +130,11 @@ New code lives in its own module, `submodules/TelegramUI/Components/VisualQuote`
 | File | Role |
 | --- | --- |
 | `VisualQuoteRegion.swift`, `VisualQuoteCodec.swift` | the region model and its `VQ1` encoding |
-| `VisualQuoteTransport.swift` | the temporary text-marker transport: attach, detach, read, presentation filter |
+| `VisualQuoteTransport.swift` | the temporary text-marker transport: attach, detach, read, presentation filter, and the outgoing-message transform |
 | `VisualQuoteDetector.swift` | object suggestion via `ImageObjectSeparation` |
 | `VisualQuoteFrameNode.swift`, `VisualQuoteShapes.swift` | the editable frame and the passive highlight |
 | `VisualQuoteReplyButtonNode.swift` | the gallery Reply button |
-| `VisualQuoteCropImage.swift`, `VisualQuoteCropView.swift` | the fragment in the bubble header and in the reply panel |
+| `VisualQuoteCropImage.swift` | the fragment in the bubble header and in the reply panel |
 
 Existing files only get thin integration points:
 - the gallery: `ChatImageGalleryItem.swift`, plus a long-press hook in `ZoomableContentGalleryItemNode.swift`;
@@ -139,7 +142,7 @@ Existing files only get thin integration points:
 - the bubble header: `ChatMessageReplyInfoNode.swift`;
 - opening a quote and VoiceOver: `ChatMessageBubbleItemNode.swift`;
 - keeping the marker out of the visible text: `ChatMessageTextBubbleContentNode.swift`;
-- send and edit: `ChatControllerNode.swift`, `ChatControllerLoadDisplayNode.swift`, `ChatControllerNavigateToMessage.swift` and `ChatController.swift`;
+- send and edit: `ChatController.swift` (`transformEnqueueMessages`, where the region leaves the reply subject for every send path), `ChatControllerNode.swift`, `ChatControllerLoadDisplayNode.swift` and `ChatControllerNavigateToMessage.swift`;
 - the gallery subject: `GalleryController.swift` in AccountContext and `GalleryData.swift`;
 - the flag: `ExperimentalUISettings.swift` and `DebugController.swift`.
 
@@ -147,7 +150,7 @@ TelegramCore is untouched.
 
 ## Further reading
 
-- [decisions.md](decisions.md): every decision with its reason, D-001 to D-033.
+- [decisions.md](decisions.md): every decision with its reason, D-001 to D-034.
 - [code-map.md](code-map.md): how the relevant parts of Telegram-iOS work (M1).
 - [m4-verification.md](m4-verification.md): what was checked on the recipient's side, with screenshot references.
 - [m5-verification.md](m5-verification.md): the regression check of plain replies and text quotes, VoiceOver, and the clean build.

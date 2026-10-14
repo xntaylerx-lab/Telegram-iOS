@@ -30,9 +30,4 @@ public struct VisualQuoteRegion: Equatable {
     public func rect(in size: CGSize) -> CGRect {
         return CGRect(x: self.rect.minX * size.width, y: self.rect.minY * size.height, width: self.rect.width * size.width, height: self.rect.height * size.height)
     }
-    
-    /// Converts the normalized point to a point in a view of the given size.
-    public func point(in size: CGSize) -> CGPoint {
-        return CGPoint(x: self.point.x * size.width, y: self.point.y * size.height)
-    }
 }

@@ -285,7 +285,8 @@ public final class ChatInputMessageAccessoryPanel: Component {
         private var contentDisposable: Disposable?
         
         private var inlineTextStarImage: UIImage?
-        private var visualQuoteCropView: VisualQuoteCropView?
+        private var visualQuoteImageNode: TransformImageNode?
+        private var visualQuoteImageKey: (EngineMessage.Id, VisualQuoteRegion)?
         private var inlineTextTonImage: (UIImage, UIColor)?
         
         public var transitionData: ChatInputAccessoryPanelTransitionData? {
@@ -916,27 +917,32 @@ public final class ChatInputMessageAccessoryPanel: Component {
             
             let textInsets = UIEdgeInsets(top: 10.0, left: 8.0, bottom: 0.0, right: 44.0)
             
-            // A reply to a photo detail shows the selected fragment before the text.
+            // A reply to a photo detail shows the selected fragment before the text, drawn by the bubble
+            // header's generator: the whole fragment, placeholder bands around it, rounded corners.
             var contentLeftInset = lineFrame.maxX + textInsets.left
-            if case let .reply(reply) = component.contents, let region = VisualQuoteRegion(innerSubject: reply.innerSubject), let message = self.messages.first {
-                let cropView: VisualQuoteCropView
-                if let current = self.visualQuoteCropView {
-                    cropView = current
+            if case let .reply(reply) = component.contents, let region = VisualQuoteRegion(innerSubject: reply.innerSubject), let message = self.messages.first, let photo = message.media.first(where: { $0 is TelegramMediaImage }) as? TelegramMediaImage {
+                let imageNode: TransformImageNode
+                if let current = self.visualQuoteImageNode {
+                    imageNode = current
                 } else {
-                    cropView = VisualQuoteCropView(frame: CGRect())
-                    cropView.layer.cornerRadius = 6.0
-                    self.visualQuoteCropView = cropView
-                    self.addSubview(cropView)
+                    imageNode = TransformImageNode()
+                    self.visualQuoteImageNode = imageNode
+                    self.addSubview(imageNode.view)
                 }
-                // The square around a fragment that is not square shows the placeholder colour, as in the bubble header.
-                cropView.backgroundColor = environment.theme.chat.inputPanel.primaryTextColor.withAlphaComponent(0.1)
+                imageNode.captureProtected = message._asMessage().isCopyProtected()
+                if self.visualQuoteImageKey?.0 != message.id || self.visualQuoteImageKey?.1 != region {
+                    self.visualQuoteImageKey = (message.id, region)
+                    imageNode.setSignal(visualQuoteCropImage(postbox: component.context.account.postbox, message: message._asMessage(), photo: photo, region: region))
+                }
                 let cropSize = CGSize(width: 36.0, height: 36.0)
-                transition.setFrame(view: cropView, frame: CGRect(origin: CGPoint(x: contentLeftInset, y: floor((size.height - cropSize.height) / 2.0)), size: cropSize))
-                cropView.update(context: component.context, message: message, region: region)
+                let applyImage = imageNode.asyncLayout()(TransformImageArguments(corners: ImageCorners(radius: 6.0), imageSize: cropSize, boundingSize: cropSize, intrinsicInsets: UIEdgeInsets(), emptyColor: environment.theme.chat.inputPanel.primaryTextColor.withAlphaComponent(0.1)))
+                applyImage()
+                transition.setFrame(view: imageNode.view, frame: CGRect(origin: CGPoint(x: contentLeftInset, y: floor((size.height - cropSize.height) / 2.0)), size: cropSize))
                 contentLeftInset += cropSize.width + 8.0
-            } else if let cropView = self.visualQuoteCropView {
-                self.visualQuoteCropView = nil
-                cropView.removeFromSuperview()
+            } else if let imageNode = self.visualQuoteImageNode {
+                self.visualQuoteImageNode = nil
+                self.visualQuoteImageKey = nil
+                imageNode.view.removeFromSuperview()
             }
             
             self.titleNode.components = titleText

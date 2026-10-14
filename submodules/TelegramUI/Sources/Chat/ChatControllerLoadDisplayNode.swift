@@ -1781,6 +1781,10 @@ extension ChatControllerImpl {
                                     webpageUrl = content.url
                                 }
                             }
+                            // Visual Quote: the region marker is re-attached on save and counts towards the limit.
+                            if VisualQuoteTransport.region(in: message) != nil {
+                                inputTextMaxLength -= Int32(VisualQuoteTransport.markerLength)
+                            }
                             
                             let editInputState: ChatTextInputState
                             if let richTextAttribute = message.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute {
@@ -2229,7 +2233,10 @@ extension ChatControllerImpl {
                 // Visual Quote: the editor worked on the visible text only; put the region back on the edited text.
                 if let region = VisualQuoteTransport.region(in: message._asMessage()) {
                     (messageText, entities) = VisualQuoteTransport.attach(region, toText: messageText, entities: entities)
-                    disableUrlPreview = true
+                    // The marker's URL must not become a link preview; a preview the user kept stays.
+                    if webpagePreviewAttribute == nil {
+                        disableUrlPreview = true
+                    }
                 }
                 var entitiesAttribute: TextEntitiesMessageAttribute?
                 if !entities.isEmpty {
@@ -4537,6 +4544,10 @@ extension ChatControllerImpl {
                         } else if let webpage = media as? TelegramMediaWebpage, case let .Loaded(content) = webpage.content {
                             webpageUrl = content.url
                         }
+                    }
+                    // Visual Quote: the region marker is re-attached on save and counts towards the limit.
+                    if VisualQuoteTransport.region(in: message) != nil {
+                        inputTextMaxLength -= Int32(VisualQuoteTransport.markerLength)
                     }
                     
                     // Visual Quote: edit the visible text only; the region is re-attached when the edit is saved.

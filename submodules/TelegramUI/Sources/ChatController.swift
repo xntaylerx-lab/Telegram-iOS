@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Postbox
+import VisualQuote
 import SwiftSignalKit
 import Display
 import AsyncDisplayKit
@@ -9017,6 +9018,10 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             defaultReplyMessageSubject = EngineMessageReplySubject(messageId: editingOriginalMessageId, quote: nil, innerSubject: nil)
         }
         
+        // A reply to a photo detail: the region leaves the reply subject here, for every send path, and
+        // rides in the text of the first message that has room for it (see VisualQuoteTransport).
+        let messages = VisualQuoteTransport.applyToOutgoing(messages, textLimit: 4096, captionLimit: Int(self.context.userLimits.maxCaptionLength))
+        
         return messages.map { message in
             var message = message
             
@@ -9477,7 +9482,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             let replyMessageSubject = self.presentationInterfaceState.interfaceState.replyMessageSubject
             
             let sendPaidMessageStars = self.presentationInterfaceState.sendPaidMessageStars
-            if self.context.engine.messages.enqueueOutgoingMessageWithChatContextResult(to: peerId, threadId: self.chatLocation.threadId, botId: results.botId, result: result, replyToMessageId: replyMessageSubject?.subjectModel, hideVia: hideVia, silentPosting: silentPosting, scheduleTime: scheduleTime, sendPaidMessageStars: sendPaidMessageStars, postpone: postpone) {
+            if self.context.engine.messages.enqueueOutgoingMessageWithChatContextResult(to: peerId, threadId: self.chatLocation.threadId, botId: results.botId, result: result, replyToMessageId: VisualQuoteTransport.withoutRegion(replyMessageSubject?.subjectModel), hideVia: hideVia, silentPosting: silentPosting, scheduleTime: scheduleTime, sendPaidMessageStars: sendPaidMessageStars, postpone: postpone) {
                 self.chatDisplayNode.setupSendActionOnViewUpdate({ [weak self] in
                     if let strongSelf = self {
                         strongSelf.chatDisplayNode.collapseInput()

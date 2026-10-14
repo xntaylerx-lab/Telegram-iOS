@@ -251,6 +251,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private var visualQuoteLayoutSize: CGSize?
     private var visualQuoteRegion: VisualQuoteRegion?
     private var visualQuoteDetectionId: Int = 0
+    private var visualQuoteIsCopyProtected: Bool = false
+    private var visualQuoteReplyPeer: EnginePeer?
+    private let visualQuoteReplyPeerDisposable = MetaDisposable()
     
     fileprivate let _ready = Promise<Void>()
     fileprivate let _title = Promise<String>()
@@ -355,6 +358,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.statusDisposable.dispose()
         self.dataDisposable.dispose()
         self.recognitionDisposable.dispose()
+        self.visualQuoteReplyPeerDisposable.dispose()
     }
     
     override func ready() -> Signal<Void, NoError> {
@@ -481,6 +485,11 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     fileprivate func setMessage(_ message: Message, mediaSubject: GalleryMediaSubject?, displayInfo: Bool, translateToLanguage: String?, peerIsCopyProtected: Bool, isSecret: Bool, location: MessageHistoryEntryLocation?) {
         if self.message?.id != message.id {
             self.clearVisualQuoteSelection(animated: false)
+            self.clearVisualQuoteHighlight()
+            if self.visualQuoteControlsInset != nil {
+                self.visualQuoteControlsInset = nil
+                self.scrollNode.view.contentInset = UIEdgeInsets()
+            }
         }
         self.message = message
         self.mediaSubject = mediaSubject
@@ -491,8 +500,18 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.imageNode.captureProtected = message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.isCopyProtected() || peerIsCopyProtected || isSecret || message.paidContent != nil
         self.updateFooter(animated: false)
         
-        if self.isVisualQuoteEnabled && self.isVisualQuoteSupported {
+        self.visualQuoteIsCopyProtected = message.isCopyProtected() || peerIsCopyProtected
+        self.visualQuoteReplyPeer = nil
+        if self.isVisualQuoteEnabled && self.isVisualQuotePhoto {
             VisualQuoteDetector.prepare(context: self.context)
+            // Selection is offered only where a reply can be sent, like the "more" menu's Reply.
+            self.visualQuoteReplyPeerDisposable.set((self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: message.id.peerId))
+            |> deliverOnMainQueue).start(next: { [weak self] peer in
+                guard let self, let peer, canSendMessagesToPeer(peer) else {
+                    return
+                }
+                self.visualQuoteReplyPeer = peer
+            }))
         }
         
         var title: String?
@@ -1204,12 +1223,30 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         return self.context.sharedContext.immediateExperimentalUISettings.visualQuote
     }
     
-    /// Regular photos only: no secret or paid media, no ads, no tiled local files.
-    private var isVisualQuoteSupported: Bool {
-        guard let message = self.message, !self.isSecret, message.adAttribute == nil, message.paidContent == nil, self.tilingNode == nil else {
+    /// Regular photos only: no secret, paid or copy-protected media, no ads, no tiled local files.
+    private var isVisualQuotePhoto: Bool {
+        guard let message = self.message, !self.isSecret, !self.visualQuoteIsCopyProtected, message.adAttribute == nil, message.paidContent == nil, self.tilingNode == nil else {
             return false
         }
         return message.media.contains(where: { $0 is TelegramMediaImage })
+    }
+    
+    /// The photo qualifies and a reply can be sent to its chat.
+    private var isVisualQuoteSupported: Bool {
+        return self.isVisualQuotePhoto && self.visualQuoteReplyPeer != nil
+    }
+    
+    /// How far the gallery's top buttons and bottom toolbar reach into this node while they are shown.
+    private var visualQuoteControlsInsets: (top: CGFloat, bottom: CGFloat) {
+        guard self.controlsVisibility() else {
+            return (0.0, 0.0)
+        }
+        var bottom: CGFloat = 0.0
+        if self.footerContentNode.supernode != nil && !self.footerContentNode.bounds.isEmpty {
+            let footerFrame = self.footerContentNode.view.convert(self.footerContentNode.bounds, to: self.view)
+            bottom = max(0.0, self.bounds.height - footerFrame.minY)
+        }
+        return (self.visualQuoteNavigationBarHeight, bottom)
     }
     
     override func contentLongTapAction(location: CGPoint) -> Bool {
@@ -1237,7 +1274,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             guard let self, self.visualQuoteDetectionId == detectionId, self.visualQuoteFrameNode != nil else {
                 return
             }
-            if case let .object(region, _) = detection {
+            if case let .object(region) = detection {
                 self.setVisualQuoteRegion(region, animated: true)
                 HapticFeedback().tap()
             }
@@ -1257,7 +1294,8 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     private func zoomToVisualQuote(region: VisualQuoteRegion) {
-        guard let (_, contentNode) = self.zoomableContent else {
+        // A selection the user started in the meantime wins over the passive highlight.
+        guard self.visualQuoteFrameNode == nil, let (_, contentNode) = self.zoomableContent else {
             return
         }
         let contentBounds = contentNode.bounds
@@ -1272,17 +1310,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         
         // The gallery's top buttons and bottom toolbar float over the photo; the fragment should end up between them.
         let gap: CGFloat = 8.0
-        var controlsTop: CGFloat = 0.0
-        var controlsBottom: CGFloat = 0.0
-        if self.controlsVisibility() {
-            controlsTop = self.visualQuoteNavigationBarHeight
-            if self.footerContentNode.supernode != nil && !self.footerContentNode.bounds.isEmpty {
-                let footerFrame = self.footerContentNode.view.convert(self.footerContentNode.bounds, to: self.view)
-                controlsBottom = max(0.0, viewSize.height - footerFrame.minY)
-            }
-        }
-        let freeTop = controlsTop > 0.0 ? controlsTop + gap : 0.0
-        let freeBottom = viewSize.height - (controlsBottom > 0.0 ? controlsBottom + gap : 0.0)
+        let controls = self.visualQuoteControlsInsets
+        let freeTop = controls.top > 0.0 ? controls.top + gap : 0.0
+        let freeBottom = viewSize.height - (controls.bottom > 0.0 ? controls.bottom + gap : 0.0)
         
         var scale = min(viewSize.width / max(1.0, padded.width), viewSize.height / max(1.0, padded.height))
         // A tall fragment is zoomed a little less so it fits between the controls.
@@ -1429,7 +1459,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             self.scrollNode.view.panGestureRecognizer.minimumNumberOfTouches = 2
         }
         frameNode.frame = self.scrollNode.view.bounds
-        frameNode.update(imageFrame: self.visualQuoteImageFrame, visibleBounds: self.bounds.insetBy(dx: 0.0, dy: 0.0), region: region, animated: animated && !isNew)
+        frameNode.update(imageFrame: self.visualQuoteImageFrame, visibleBounds: self.bounds, region: region, animated: animated && !isNew)
         if isNew && animated {
             frameNode.animateIn()
         }
@@ -1498,8 +1528,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         let imageFrame = self.visualQuoteImageFrame
         let regionRect = CGRect(x: imageFrame.minX + region.rect.minX * imageFrame.width, y: imageFrame.minY + region.rect.minY * imageFrame.height, width: region.rect.width * imageFrame.width, height: region.rect.height * imageFrame.height)
         let spacing: CGFloat = 20.0
-        let topLimit: CGFloat = 90.0
-        let bottomLimit: CGFloat = self.bounds.height - 110.0
+        let controls = self.visualQuoteControlsInsets
+        let topLimit: CGFloat = controls.top + spacing
+        let bottomLimit: CGFloat = self.bounds.height - controls.bottom - spacing
         
         var frame = CGRect(origin: CGPoint(x: regionRect.midX - size.width / 2.0, y: regionRect.maxY + spacing), size: size)
         if frame.maxY > bottomLimit {
@@ -1524,22 +1555,16 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     private func visualQuoteReplyPressed() {
-        guard let message = self.message, let region = self.visualQuoteRegion else {
+        guard let message = self.message, let region = self.visualQuoteRegion, let peer = self.visualQuoteReplyPeer, let navigationController = self.baseNavigationController() else {
             return
         }
         // Mirrors the "Reply" action of the "more" menu; the region rides along as the reply's inner subject.
         let context = self.context
-        let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: message.id.peerId))
-        |> deliverOnMainQueue).start(next: { [weak self] peer in
-            guard let self, let peer, canSendMessagesToPeer(peer), let navigationController = self.baseNavigationController() else {
-                return
-            }
-            self.beginCustomDismiss(.simpleAnimation)
-            context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(message.id), highlight: ChatControllerSubject.MessageHighlight(quote: nil, subject: region.innerSubject), timecode: nil, setupReply: true)))
-            Queue.mainQueue().after(0.3) {
-                self.completeCustomDismiss(false)
-            }
-        })
+        self.beginCustomDismiss(.simpleAnimation)
+        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(message.id), highlight: ChatControllerSubject.MessageHighlight(quote: nil, subject: region.innerSubject), timecode: nil, setupReply: true)))
+        Queue.mainQueue().after(0.3) { [weak self] in
+            self?.completeCustomDismiss(false)
+        }
     }
     
     override func visibilityUpdated(isVisible: Bool) {
