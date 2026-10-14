@@ -25,7 +25,7 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 - Exact corners in Nika's test channel (2026-10-13): the frame dragged into the top-right and the bottom-left corner of the photo is clamped there, the header shows that corner of the photo, and the gallery opens zoomed to it (`screenshots/m4/45`-`48`).
 - Second chat theme: with the winter colour theme (blue snowflake wallpaper) the incoming visual replies keep white bubbles and the channel-coloured header (`screenshots/m4/52`); the simulator was switched back to the original theme afterwards.
 - Minimum-width selection: a 44 pt wide, about 270 pt tall strip is delivered; the header shows it whole with placeholder fill on both sides (D-026) and the gallery opens zoomed to it (`screenshots/m4/50`, `51`).
-- Opening a region at the top or bottom edge of the photo, or a tall strip, places it between the gallery's top buttons and bottom toolbar (D-029, `screenshots/m4/53`, `54`, `56`); dragging the photo removes the extra room (`55`).
+- Opening a region at the top or bottom edge of the photo, or a tall strip, places it between the gallery's top buttons and bottom toolbar (D-029, `screenshots/m4/53`, `54`, `56`); after dragging the photo down and back up to its limit it reaches the bottom of the screen with no dark band, so the extra room is gone (`55`, `57`).
 
 ## Observed, not changed (for Nika)
 
