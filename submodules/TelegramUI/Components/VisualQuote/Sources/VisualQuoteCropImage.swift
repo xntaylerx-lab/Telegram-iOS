@@ -85,6 +85,13 @@ public func visualQuoteCropImage(postbox: Postbox, message: Message, photo: Tele
             }
             
             context.withFlippedContext { c in
+                // Clip to the rounded shape instead of `addCorners`: that helper multiplies the colour of
+                // semi-transparent pixels by their alpha once more, which darkened the corners of the
+                // placeholder bands around a fragment.
+                if case let .Corner(radius) = arguments.corners.topLeft, radius > 0.0 {
+                    c.addPath(UIBezierPath(roundedRect: drawingRect, cornerRadius: radius).cgPath)
+                    c.clip()
+                }
                 c.setBlendMode(.copy)
                 if let cropped {
                     let imageSize = CGSize(width: cropped.width, height: cropped.height)
@@ -107,7 +114,6 @@ public func visualQuoteCropImage(postbox: Postbox, message: Message, photo: Tele
                     c.fill(drawingRect)
                 }
             }
-            addCorners(context, arguments: arguments)
             return context
         }
     }

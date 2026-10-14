@@ -764,7 +764,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             var visualQuoteImageOriginY: CGFloat = 4.0
             if visualQuote != nil {
                 // Name on top (as for a text quote), the fragment below it with the text's spacing.
-                visualQuoteImageOriginY = titleLayout.size.height - textInsets.bottom + spacing - textInsets.top + 1.0
+                visualQuoteImageOriginY = titleLayout.size.height - textInsets.bottom + 4.0
                 size.width = max(size.width, 9.0 + imageBoundingSize.width + 6.0)
                 size.height = visualQuoteImageOriginY + imageBoundingSize.height + 5.0
             }
