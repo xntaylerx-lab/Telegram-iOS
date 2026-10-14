@@ -11,7 +11,7 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 
 - Opening a quote zooms to the region, centers it on screen and keeps the dim plus outline (variant B); the highlight follows pinch and double-tap zoom.
 - A region touching the top-left corner and one touching the bottom edge are encoded, delivered to the second simulator and opened centered.
-- A full-width strip of minimum height (44 pt) is delivered and opened correctly. Its square thumbnail is aspect-filled, so both ends are cut off in the reply header: open UX question.
+- A full-width strip of minimum height (44 pt) is delivered and opened correctly. Since D-026 the header shows it whole (aspect-shaped thumbnail, short side at least a quarter, fitted when clamped).
 - On a freshly signed-in device the header first shows a blurred crop from the thumbnail; after the app reconnected and the photo loaded, the crop became sharp.
 - Deleting the original: the reply header disappears, exactly as for any reply to a deleted message in Telegram (D-022). No crash, no stale crop, no browser navigation.
 - With the editable frame active: pinch out, pinch in and a two-finger pan all move the photo while the frame stays on the same part of it and the Reply button follows; one finger still moves the frame, and Reply produces the crop the frame showed (`screenshots/m4/20` video, `21`-`25`).

@@ -535,6 +535,8 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             var visualQuote: (region: VisualQuoteRegion, message: EngineRawMessage, photo: TelegramMediaImage)?
             if let region = VisualQuoteTransport.region(in: arguments.parentMessage), let message = arguments.message, !message.containsSecretMedia, let photo = message.media.first(where: { $0 is TelegramMediaImage }) as? TelegramMediaImage, let representation = largestRepresentationForPhoto(photo) {
                 visualQuote = (region, message, photo)
+                // Laid out like a text quote (name + quote icon), with the fragment where the quoted text goes.
+                messageText = NSAttributedString(string: "", font: textFont, textColor: textColor)
                 updatedMediaReference = .message(message: MessageReference(message), media: photo)
                 imageDimensions = CGSize(width: max(1.0, representation.dimensions.cgSize.width * region.rect.width), height: max(1.0, representation.dimensions.cgSize.height * region.rect.height))
             } else if case let .pollOption(optionId) = arguments.innerSubject, let poll = arguments.message?.media.first(where: { $0 is TelegramMediaPoll }) as? TelegramMediaPoll, let pollOption = poll.options.first(where: { $0.opaqueIdentifier == optionId }), let media = pollOption.media {
@@ -659,8 +661,11 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                 isQuote = true
             }
             
-            if isQuote {
+            let showsQuoteIcon = isQuote || visualQuote != nil
+            if showsQuoteIcon {
                 additionalTitleWidth += 10.0
+            }
+            if isQuote {
                 maxTitleNumberOfLines = 2
                 maxTextNumberOfLines = isQuoteExpanded ? 50 : 5
                 if imageTextInset != 0.0 {
@@ -694,11 +699,17 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             imageSide = floor(titleLineHeight * (visualQuote != nil ? VisualQuoteLayout.replyImageScale : 2.0))
             
             var applyImage: (() -> TransformImageNode)?
+            var imageBoundingSize = CGSize(width: imageSide, height: imageSide)
             if let imageDimensions = imageDimensions {
-                let boundingSize = CGSize(width: imageSide, height: imageSide)
-                leftInset += imageSide + 6.0
+                if visualQuote != nil {
+                    imageBoundingSize = VisualQuoteLayout.replyThumbnailSize(fragmentSize: imageDimensions, side: imageSide)
+                }
+                let boundingSize = imageBoundingSize
+                if visualQuote == nil {
+                    leftInset += boundingSize.width + 6.0
+                }
                 var radius: CGFloat = 4.0
-                var imageSize = imageDimensions.aspectFilled(boundingSize)
+                var imageSize = visualQuote != nil ? boundingSize : imageDimensions.aspectFilled(boundingSize)
                 if hasRoundImage {
                     radius = boundingSize.width / 2.0
                     imageSize.width += 2.0
@@ -750,8 +761,12 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             size.width = max(titleLayout.size.width + additionalTitleWidth - textInsets.left - textInsets.right, textLeftInset + textLayout.size.width - textInsets.left - textInsets.right - textCutoutWidth) + leftInset + 6.0
             size.height = titleLayout.size.height + textLayout.size.height - 2 * (textInsets.top + textInsets.bottom) + 2 * spacing
             size.height += 2.0
+            var visualQuoteImageOriginY: CGFloat = 4.0
             if visualQuote != nil {
-                size.height = max(size.height, imageSide + 8.0)
+                // Name on top (as for a text quote), the fragment below it with the text's spacing.
+                visualQuoteImageOriginY = titleLayout.size.height - textInsets.bottom + spacing - textInsets.top + 1.0
+                size.width = max(size.width, 9.0 + imageBoundingSize.width + 6.0)
+                size.height = visualQuoteImageOriginY + imageBoundingSize.height + 5.0
             }
             if isExpiredStory || isStory || isPoll {
                 size.width += 16.0
@@ -811,7 +826,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                         node.addSubnode(imageNode)
                         node.imageNode = imageNode
                     }
-                    imageNode.frame = CGRect(origin: CGPoint(x: 9.0, y: 4.0), size: CGSize(width: imageSide, height: imageSide))
+                    imageNode.frame = CGRect(origin: CGPoint(x: 9.0, y: visualQuoteImageOriginY), size: imageBoundingSize)
                     
                     if let updateImageSignal = updateImageSignal {
                         imageNode.setSignal(updateImageSignal)
@@ -942,7 +957,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                     animation: animation
                 )
                 
-                if isQuote {
+                if showsQuoteIcon {
                     let quoteIconFrame = CGRect(origin: CGPoint(x: backgroundFrame.maxX - 4.0 - quoteIcon.size.width, y: backgroundFrame.minY + 4.0), size: quoteIcon.size)
                     
                     let quoteIconView: UIImageView
