@@ -21,12 +21,16 @@ Status as of 2026-10-13: the receiver path works end to end on one account acros
 - Confirmed by Nika on her phone in stock Telegram, dark theme: a visual reply with the leading marker shows no underline and no link colour (2026-10-13).
 - The transport entity no longer underlines the message text. Root cause (CoreText caret offset 0 for a trailing zero-width space) and the fix (marker first) are in D-023; verified in the dark theme with the presentation filter switched off, i.e. the way a stock client renders it (`screenshots/m4/16`).
 - Editing a sent visual reply keeps the region: the marker is stripped in the editor and re-attached on save (D-024). Checked on a message with the leading marker and on an older one with the trailing marker.
-
 - Incoming bubble without a second account: in a broadcast channel Telegram renders the owner's own posts as incoming (`Message.effectivelyIncoming`, `MessageUtils.swift`). A visual reply to a photo in Nika's test channel shows a white incoming bubble with the header in the channel's colour (bar, name, tinted background and quote icon all red, matching the avatar), and tapping it opens the gallery zoomed to the region with the dim and outline. Checked in the light theme with the default wallpaper (`screenshots/m4/40`-`42`) and in the dark theme with its own wallpaper on the second simulator (`43`, `44`), 2026-10-13.
+- Exact corners in Nika's test channel (2026-10-13): the frame dragged into the top-right and the bottom-left corner of the photo is clamped there, the header shows that corner of the photo, and the gallery opens zoomed to it (`screenshots/m4/45`-`48`).
+- Minimum-width selection: a 44 pt wide, about 270 pt tall strip is delivered; the header shows it whole with placeholder fill on both sides (D-026) and the gallery opens zoomed to it (`screenshots/m4/50`, `51`).
+
+## Observed, not changed (for Nika)
+
+- With stock `zoom(to:)` (D-028) a region at the top or bottom of the photo, or a tall strip, ends up partly under the gallery's top title and buttons or its bottom toolbar (`46`, `48`, `51`).
+- The 36 pt thumbnail in the composer's reply panel (D-013) is aspect-filled, so a narrow strip shows only its middle (`49`), while the bubble header shows the whole strip.
 
 ## Still open
 
 - Incoming bubble on a second chat theme or a custom wallpaper.
 - Incoming bubble in a private or group chat (needs a second account or a bot; the channel covers only the colours).
-- Top-right corner: sent from the gallery with the frame clamped to the corner; the header shows the corner crop and the gallery opens zoomed to it (`screenshots/m4/45`, `46`). At the top edge the zoomed region sits under the status bar and the gallery's top buttons (stock `zoom(to:)`, D-028); shown to Nika, no change made.
-- Narrow (minimum width) selections and the bottom-left corner.
