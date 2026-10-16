@@ -101,7 +101,7 @@ This compiles the region, codec and transport sources with stubs and runs about 
 - One new string, `VisualQuote.VoiceOver.SelectedArea`, exists only in English. Other languages fall back to English. Everything else reuses existing localized strings.
 
 **Not verified:**
-- A visual reply as an **incoming** bubble in a private or group chat. Only one account was available. Incoming rendering was checked in a broadcast channel, where Telegram shows the owner's own posts as incoming.
+- A visual reply as an **incoming** bubble in a group chat. Incoming rendering was checked in a broadcast channel, where Telegram shows the owner's own posts as incoming, and on 2026-10-15 in a private chat between two accounts on two simulators: the recipient saw the fragment in the reply header, and tapping it opened the original zoomed to the highlighted region.
 - Running on a physical iPhone, which needs signing with an Apple ID.
 
 ## How the region travels (prototype vs. production)
