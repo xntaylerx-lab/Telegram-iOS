@@ -32,11 +32,15 @@ The feature sits behind a Debug Settings switch, "Visual Quote" (`ExperimentalUI
 
 Clone into a path without spaces. Bazel and the build scripts break on spaces, so `~/Developer` works but `~/Documents/Telegram contest` does not.
 
+Clone Telegram's own repository, then fetch the prototype branch `visual-quote` from https://github.com/xntaylerx-lab/Telegram-iOS on top of it. Cloning that repository directly with `--recursive` fails: two submodules (`rlottie`, `tgcalls`) have relative URLs in `.gitmodules`, which resolve only under `github.com/TelegramMessenger`.
+
 ```sh
 mkdir -p ~/Developer && cd ~/Developer
 git clone --recursive https://github.com/TelegramMessenger/Telegram-iOS.git
 cd Telegram-iOS
-git checkout visual-quote   # the prototype branch; it exists only in the author's local clone
+git fetch https://github.com/xntaylerx-lab/Telegram-iOS.git visual-quote:visual-quote
+git checkout visual-quote
+git submodule update --init --recursive
 ```
 
 ### 2. Build configuration
