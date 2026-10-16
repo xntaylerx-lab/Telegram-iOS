@@ -376,6 +376,7 @@ swift_library(
     module_name = "Lib",
     srcs = glob([
         "Telegram-iOS/Application.swift",
+        "Telegram-iOS/TouchIndicatorOverlay.swift",
     ]),
     data = [
         ":Icons",
