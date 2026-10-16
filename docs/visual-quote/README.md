@@ -152,9 +152,11 @@ Existing files only get thin integration points:
 
 TelegramCore is untouched.
 
+Outside the feature, `Telegram/Telegram-iOS/TouchIndicatorOverlay.swift` and two lines in `Application.swift` draw a disc under every touch for screen recordings of the demo video. It is a debug tool and only runs when the app is launched with `--show-touches` (D-036).
+
 ## Further reading
 
-- [decisions.md](decisions.md): every decision with its reason, D-001 to D-034.
-- [code-map.md](code-map.md): how the relevant parts of Telegram-iOS work (M1).
+- [decisions.md](decisions.md) (in Russian): every decision with its reason, D-001 to D-036.
+- [code-map.md](code-map.md) (in Russian): how the relevant parts of Telegram-iOS work (M1).
 - [m4-verification.md](m4-verification.md): what was checked on the recipient's side, with screenshot references.
 - [m5-verification.md](m5-verification.md): the regression check of plain replies and text quotes, VoiceOver, and the clean build.
