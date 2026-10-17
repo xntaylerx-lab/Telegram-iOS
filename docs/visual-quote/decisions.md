@@ -62,7 +62,7 @@ XcodeBuildMCP in this session has no tap tools. Taps and long presses use the iO
 
 ### D-011. The selection is an editable frame, not an object outline (Nika's decision, 2026-10-13)
 Instead of a glow or outline along the mask, a frame with corner handles is shown, as in photo cropping in Telegram's editor (handle sizes and hit areas are taken from `TGPhotoCropAreaView`): the rest of the photo is dimmed, the corners can be dragged, the whole frame can be moved, and while it is active zooming and scrolling of the photo are off. Vision only suggests the default frame around the object it finds; if there is no object, the frame goes around the touch point.
-Reasons: this is a direct relative of the text quote (the selection is adjusted with handles); only a rectangle travels over the network, so sender and recipient see the same thing; the value does not depend on recognition quality and is the same in the simulator and on a device. The glow and outline code was removed from the module (it remains in git history, commit a0a6f55f85).
+Reasons: this is a direct relative of the text quote (the selection is adjusted with handles); only a rectangle travels over the network, so sender and recipient see the same thing; the value does not depend on recognition quality and is the same in the simulator and on a device. The glow and outline code was removed from the module (it remains in git history, commit 8af999ae09).
 
 ## M3 — Sending (2026-10-13)
 
@@ -197,3 +197,7 @@ The log was kept in Russian, the project's working language. The repository is p
 
 ### Note on D-039 (2026-10-16). `code-map.md` in English too
 At Nika's request `code-map.md` was translated as well, without changing its content. A line at the top marks it as a snapshot from M1, written before implementation, so that its options (section 5) and open questions (section 7) are not read as the current state.
+
+### D-040. The prototype's commits carry no Claude co-author trailer (Nika's decision, 2026-10-17)
+After the repository went public, GitHub listed the `claude` account among its contributors, because every prototype commit ended with a `Co-Authored-By: Claude … <noreply@anthropic.com>` trailer. Nika asked to remove it. The trailer was stripped from all 66 commits of `visual-quote` with `git filter-branch --msg-filter`; trees, authors, dates and the rest of each message are unchanged (checked commit by commit), and the branch was force-pushed. All commit hashes of the branch changed; the one hash this log quotes (D-011) was updated, and hashes quoted in notes outside the repository refer to the old history. New commits are written without the trailer.
+The `claude` account may still appear in Contributors: Telegram's own history, which this repository carries, has 743 commits with the same trailer, and `TelegramMessenger/Telegram-iOS` lists `claude` among its top contributors.
