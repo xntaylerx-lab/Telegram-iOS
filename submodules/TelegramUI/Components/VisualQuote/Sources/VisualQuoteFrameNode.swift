@@ -49,7 +49,10 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     
     private var dragMode: DragMode?
     private var dragStartRect: CGRect = CGRect()
-    
+    /// Where the finger went down. The pan only begins after some movement, so a quick drag
+    /// out of a corner is already outside the corner's zone by then.
+    private var touchDownLocation: CGPoint?
+
     public init(region: VisualQuoteRegion, mode: Mode = .editable) {
         self.region = region
         self.mode = mode
@@ -185,11 +188,18 @@ public final class VisualQuoteFrameNode: ASDisplayNode, UIGestureRecognizerDeleg
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         return otherGestureRecognizer is UIPanGestureRecognizer
     }
-    
+
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if gestureRecognizer.numberOfTouches == 0 {
+            self.touchDownLocation = touch.location(in: self.view)
+        }
+        return true
+    }
+
     @objc private func panGesture(_ recognizer: UIPanGestureRecognizer) {
         switch recognizer.state {
         case .began:
-            let location = recognizer.location(in: self.view)
+            let location = self.touchDownLocation ?? recognizer.location(in: self.view)
             self.dragStartRect = self.frameRect
             self.dragMode = self.dragMode(at: location)
         case .changed:
