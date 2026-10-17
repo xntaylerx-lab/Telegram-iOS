@@ -194,3 +194,6 @@ On the public repository's main page GitHub showed Telegram's root `README.md`: 
 
 ### D-039. The decision log is in English (Nika's decision, 2026-10-16)
 The log was kept in Russian, the project's working language. The repository is public and the submission is read in English, so Nika asked for the log in English. The whole file was translated, entry by entry, without changing the content; new entries are written in English. The Russian original is in git history. `code-map.md` stays in Russian.
+
+### Note on D-039 (2026-10-16). `code-map.md` in English too
+At Nika's request `code-map.md` was translated as well, without changing its content. A line at the top marks it as a snapshot from M1, written before implementation, so that its options (section 5) and open questions (section 7) are not read as the current state.
