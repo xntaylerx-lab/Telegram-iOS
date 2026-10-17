@@ -1,203 +1,101 @@
 # Visual Quote — decision log
 
-Each decision: what was chosen, why, and what the alternative was. New entries are added at the bottom. The log was kept in Russian until 2026-10-16, when it was translated into English (D-039); the Russian original is in git history.
+What was decided while building the prototype, and why. Each entry is one decision; replaced decisions stay in the list, marked, so the numbers other documents refer to stay valid. "Nika" marks the design calls made by the author.
 
-## M0 — Environment (2026-10-12)
+## Environment (2026-10-12)
 
-### D-001. The clone lives in `~/Developer/Telegram-iOS`, branch `visual-quote`
-Reason: the path `~/Documents/Telegram contest` contains a space, and Documents may sync with iCloud. This is set by the brief (section 4).
+**D-001. The clone lives in `~/Developer/Telegram-iOS`.** The build breaks on paths with spaces, and Documents may sync with iCloud.
 
-### D-002. Simulator build through `Make.py build` with fake signing from `build-system/fake-codesigning`
-Chosen from the two paths the brief allows (`generateProject --disableProvisioningProfiles`, or `build` with fake-codesigning).
-Reason: `build` produces a ready `bazel-bin/Telegram/Telegram.ipa`, which the standard workflow for updating the app in the simulator from the repository's `CLAUDE.md` relies on (copying the `.app` out of the `.ipa`). `generateProject` needs an Xcode project and a build through xcodebuild, and the Xcode-managed signing path requires a real Apple team.
-Command (from the clone root):
-```
-python3 build-system/Make/Make.py --cacheDir="$HOME/telegram-bazel-cache" build \
-  --configurationPath="$HOME/Developer/telegram-config/build-config.json" \
-  --codesigningInformationPath=build-system/fake-codesigning \
-  --buildNumber=1 --configuration=debug_sim_arm64
-```
+**D-002. The simulator build uses `Make.py build` with the repository's fake signing.** It produces a ready app without an Apple developer team. The command is in the README.
 
-### D-003. The build configuration is a copy at `~/Developer/telegram-config/build-config.json` with `team_id = C67CF9S4VU` and `bundle_id = ph.telegra.Telegraph`
-Reason: `Make.py` selects provisioning profiles by the exact `team_id.bundle_id` prefix of the profile's `application-identifier` (`BuildConfiguration.py`, `copy_profiles_from_directory`). The profiles in `fake-codesigning` are issued only for `C67CF9S4VU.ph.telegra.Telegraph`; with any other `bundle_id`/`team_id` no profile matches, `aps-environment` is not found, and the build fails before Bazel starts.
-The original `config/build-config.json` in the project folder is unchanged; the modified copy lives outside the repository and outside git. The api_id/api_hash keys never reach the repository: `build-input/*` is in `.gitignore`.
-Status: awaiting Nika's confirmation (the bundle id is the same as the official Telegram app's; that is safe for the simulator, not for distribution).
+**D-003. The build configuration uses Telegram's own team and bundle ids.** The fake signing profiles match only that pair. This is fine for the simulator; a distributed build would need its own ids. The configuration with the API keys lives outside the repository.
 
-### D-004. Xcode 26 needs the separate Metal Toolchain component
-Fact: the first build failed in `MetalCompile` with `cannot execute tool 'metal' due to missing Metal Toolchain`. The component was downloaded with `xcodebuild -downloadComponent MetalToolchain` (688 MB). This is a required step when setting up the environment from scratch; to be written into the README.
+**D-004. Xcode 26 needs the Metal Toolchain component**, a separate download. It is listed in the README requirements.
 
-### D-005. Telegram's test environment (test DC)
-Fact from the code: the client supports the test DC only through the launch argument `--ui-test` (`AppDelegate.swift`, `isUITest`). In this mode it uses a separate data folder, `telegram-ui-tests-data`, which **is wiped on every launch**, and sign-up goes to the test servers. Test numbers are `99966XYYYY` (country `+999`); the confirmation code is the DC digit five times (`docs/ui-testing.md`).
-Checked in the simulator: launched with `--ui-test` the client connects to the test DCs (149.154.167.40, 149.154.175.10, 149.154.175.117), without the flag to the production addresses. There is no separate switch in Debug Settings. Consequence: without a small code change a test account does not survive an app restart. How to run development (real accounts, or the test DC with a change) is Nika's call after M0.
+**D-005. Telegram's test servers are reachable only with the `--ui-test` launch argument**, which wipes the login on every launch.
 
-### D-006. Development runs on Telegram's test servers (test DC), not on real accounts
-Nika's decision (2026-10-12). Reasons: no real phone number is needed, and there is no risk of restrictions on an account registered through an unofficial build; fake characters for the demo can be set up as separate test accounts with names and avatars.
-How to launch: both simulators with the `--ui-test` argument (the sender through XcodeBuildMCP `launch_app_sim` with `launchArgs`, the recipient through `xcrun simctl launch <udid> ph.telegra.Telegraph --ui-test`).
-Open question for M1: is a small change needed so that the test login is not wiped on every launch (`AppDelegate.swift` deletes `telegram-ui-tests-data` on start with `--ui-test`).
-Real accounts will not be needed before M3, to check how the message looks in regular Telegram.
+**D-006. Develop on the test servers.** Replaced by D-007.
 
-### Note on D-006 (2026-10-12, evening). The test servers reject the fixed code
-Fact: with our api_id, `auth.sendCode` on the test DC succeeds (the server replies `sentCodeTypeSms(length: 5)`, migration between DC1–DC3 works), but `auth.signIn` with the code `XXXXX` returns `400: PHONE_CODE_INVALID` on all three DCs. Checked through the sign-in screen and through the repository's headless path (`--ui-test --delete-test-account <number>`, no push token), with the same result. The repository's own UI test (`Telegram/Tests/Sources/UITests.swift`) runs the same scenario with the Telegram team's api_id. The only remaining variable is our api_id. App logs contain api_hash in clear text: never forward them to anyone.
-Status: open. Options: check the "Test configuration" for the app on my.telegram.org/apps; try resending the code as a call; fall back to real accounts (the risk is described in D-006).
+**D-007. Develop on real accounts.** The test servers rejected the fixed login code for our api_id, and nothing in the client could change that.
 
-### D-007. Switch to real accounts (overrides D-006)
-Nika's decision (2026-10-12, evening). Reason: the test servers reject the fixed code with our api_id (see the note on D-006), and code cannot change that. Both simulators are launched without `--ui-test`: the sender through XcodeBuildMCP `launch_app_sim` with no arguments, the recipient through `xcrun simctl launch <udid> ph.telegra.Telegraph`. Data now lives in the regular `telegram-data` folder and survives restarts. The risk of restrictions on a fresh account is accepted knowingly.
+## Selection (2026-10-12 – 13)
 
-## M2 — Selection on the sender's side (2026-10-12, evening)
+**D-008. Object suggestion reuses Telegram's own object separation**, the one behind sticker cutouts. New code lives in its own `VisualQuote` module, and the feature sits behind a Debug Settings switch.
 
-### D-008. Selection is built on `ImageObjectSeparation`; the highlight is our own overlay in a new `VisualQuote` module
-Reason: the client already cuts out objects for stickers (Vision on a device, the CoreML model `u2netp` in the simulator); the new code only calls it. The outline from `StickerCutoutOutlineView` is not reused: it has particles and is tied to the editor screen; instead the highlight is computed from the mask with CoreImage filters (two variants: glow and outline). Integration points: the `contentLongTapAction` hook in `ZoomableContentGalleryItemNode` (3 lines) and a section in `ChatImageGalleryItemNode`. The `visualQuote` flag in Debug Settings is on by default in our build.
+**D-009. Two simulator-only fixes in the detector**, so the simulator's fallback model returns a correct mask. That model finds one main object per photo; per-object suggestions need a device.
 
-### D-009. Two simulator pitfalls, both worked around inside `VisualQuote`
-1. The CoreML path of `ImageObjectSeparation` scales the mask back by `image.size` in points; the gallery image has `scale = 3`, so the mask came out three times smaller and shifted. Fix: the detector passes a copy of the image with `scale = 1`. On a device (the Vision path) the problem does not exist; upstream code is not touched.
-2. After `CISharpenLuminance` in a live CoreImage graph the mask goes outside 0…1, so inversion and multiplication produced a bright band along the contour and a "veil" over the whole frame. Fix: `CIColorClamp` on the input, and the result is redrawn into a premultiplied CGContext before it is handed to the layer.
-Consequence for the demo: in the simulator the model selects one "main" object per photo (on the pumpkin shot, the whole group of orange ones); a touch outside it triggers the ring. Per-object selection is iPhone-only.
+**D-010. Interactive checks run in the iOS simulator.** Screenshots of private chats stay out of reports.
 
-### D-010. Interactive checks in the simulator
-XcodeBuildMCP in this session has no tap tools. Taps and long presses use the iOS Simulator tool built into Claude Code (not `cliclick`/`osascript`/`screencapture`). Screenshots of screens with private chats do not go into reports.
+**D-011. The selection is an editable frame, not an object outline (Nika).** It works like Telegram's photo crop: corners resize, dragging inside moves, the rest of the photo is dimmed. Object detection only suggests the starting frame. Why: it mirrors adjusting a text selection; only a rectangle is sent, so both sides see exactly the same area; and it works the same whatever the detection quality.
 
-### Open after M2 (Nika's choice)
-- Highlight variant: A "glow" or B "outline" (screenshots `screenshots/m2/01`, `02`).
-- Placement of the "Reply" button: currently a glass button under the selection; the alternative is the gallery's bottom glass panel.
+## Sending (2026-10-13)
 
-### D-011. The selection is an editable frame, not an object outline (Nika's decision, 2026-10-13)
-Instead of a glow or outline along the mask, a frame with corner handles is shown, as in photo cropping in Telegram's editor (handle sizes and hit areas are taken from `TGPhotoCropAreaView`): the rest of the photo is dimmed, the corners can be dragged, the whole frame can be moved, and while it is active zooming and scrolling of the photo are off. Vision only suggests the default frame around the object it finds; if there is no object, the frame goes around the touch point.
-Reasons: this is a direct relative of the text quote (the selection is adjusted with handles); only a rectangle travels over the network, so sender and recipient see the same thing; the value does not depend on recognition quality and is the same in the simulator and on a device. The glow and outline code was removed from the module (it remains in git history, commit 8af999ae09).
+**D-012. The region travels as an invisible link in the reply text.** The server silently drops the reply field we tried first (`poll_option`). So a zero-width character carries a link to `example.com/visual-quote#<region>`, a reserved domain that leads nowhere, with link previews off. Stock Telegram shows an ordinary reply to the photo. In production this would be one new reply field next to `poll_option`.
 
-## M3 — Sending (2026-10-13)
+**D-013. The reply panel above the input field shows the selected fragment.**
 
-### D-012. Coordinate transport is variant B (invisible link); variant A was rejected by the server
-Checked with one send: the client put the region into the reply's `poll_option`, and the server accepted the message but returned `messageReplyHeader` with `pollOption: nil`: the field is silently dropped for a message without a poll. So variant B is used: a zero-width character U+200B with a `textUrl` entity is added to the reply text, a URL of the form `https://example.com/visual-quote#<base64url>` carries the encoded region (format `VQ1` + kind + 6×Float32), and link previews are disabled with the `no_webpage` flag. The server returned the entity unchanged. The example.com domain is reserved for documentation and leads nowhere.
-Locally the region still lives in `innerSubject = .pollOption(bytes)` (composer, reply panel): it is a ready channel from the gallery to the panel that needs no changes to TelegramCore. Before sending, `ChatControllerNode.sendCurrentMessage` takes it out of there, clears `innerSubject`, and attaches it to the first text fragment. In regular Telegram such a message looks like an ordinary reply to the photo (checked in our own client: the bubble does not differ from its neighbours).
-In production this would be a reply field next to `todo_item_id` / `poll_option` instead.
+## Recipient (2026-10-13)
 
-### D-013. The reply panel shows a 36×36 fragment before the title
-In the active panel component (`ChatInputMessageAccessoryPanel`) the thumbnail was commented out upstream; for Visual Quote a `VisualQuoteCropView` was added (a crop from the best local representation of the photo, decoded at no more than 1024 px). The title stays "Reply to <name>", the subtitle "Photo". The native "Reply to Poll Option" title for our `pollOption` is suppressed.
+**D-014. The reply header shows the fragment, cut from the original photo already in the chat**, larger than the usual reply thumbnail. Nika chose the largest of four sizes. If the original is unavailable, the reply looks like any other reply.
 
-## M4 — Recipient (2026-10-13)
+**D-015. Tapping the header opens the original photo zoomed to the region.** How the region is marked there was replaced by D-016.
 
-### D-014. The reply header shows a fragment of the original; its size is a multiple of the line height
-The fragment is cut from the best local representation of the photo (first the thumbnail, the full photo once loaded; the `visualQuoteCropImage` signal in the VisualQuote module) and drawn by the same `TransformImageNode` as the regular reply thumbnail, with the same corner radius of 4. The size is set by the constant `VisualQuoteLayout.replyImageScale` (the regular thumbnail is 2 line heights): variant 1 is 3, variant 2 is 4.5 (screenshots `screenshots/m4/01` and `04`). The header grows to fit the fragment. If the original message is unavailable (deleted or not loaded into the context), the header is drawn as an ordinary reply without a fragment; upstream code does not change.
+**D-016. When a quote is opened, everything around the region is dimmed, and stays dimmed (Nika).** No frame or handles: a frame looks like an invitation to edit. The final look is D-019.
 
-### D-015. Tapping the header opens the gallery on the original, zoomed to the region
-The region is passed through a new case, `GalleryMediaSubject.visualQuoteRegion(Data)` (AccountContext module; every existing `switch` over this enum has a `default`). For a quote the gallery opens in single-message mode (`standaloneMessage`), because for chat history (`peerMessagesAtId`) the subject does not reach the item; swiping to neighbouring photos is not available in this mode, which is acceptable for following a quote. After the transition from the bubble finishes (0.45 s), the photo zooms to the region with a 35% margin around it, within the gallery's maximum zoom, and the same frame the sender saw is shown for 1.4 s (non-interactive). Checked with a screen recording (`screenshots/m4/07`).
+**D-017. Centre the region even if that shows empty space beyond the photo's edge (Nika).** Replaced by D-028.
 
-### D-016. Following a quote: dimming around the region without a frame, and it does not go away (Nika's decision, 2026-10-13)
-Instead of a short flash of the frame with corners (1.4 s, as in D-015), the gallery dims the whole photo around the quoted region and keeps it that way until it closes. There is no frame, no corners and no outline: `VisualQuoteFrameNode` got a `.highlight` mode (only the dimming layer, no gestures), and the layer itself sits inside the zoomable content, so it follows zooming and scrolling. This is one and the same path for the recipient and for the sender tapping their own sent quote. When the sender selects a region, the frame with corners stays: it is needed to drag the edges. A new long press in the gallery removes the passive dimming and shows the editable frame.
-Reason: the reader only needs to see what it is about; a frame looks like an invitation to edit.
+**D-018. Malformed regions are rejected** when a message is read, and tiny rounding errors at the photo's edge are tolerated.
 
-### Note on D-014 (2026-10-13). Fragment size, variant 3
-Nika asked for larger than 4.5: variant 3 was built, `replyImageScale = 6` (screenshot `screenshots/m4/08`), and for comparison variant 4, 8 (`screenshots/m4/10`). Nika's choice.
+**D-019. The opened quote is marked by 45% dimming and a thin white outline (Nika)**, chosen over stronger dimming without an outline. The dimming matches Telegram's crop editor.
 
-### Note on D-016 (2026-10-13). Highlight contrast on the recipient's side
-Nika: dimming of 0.4 without an outline is not enough. Two variants (comparison `screenshots/m4/14`): A, dimming of 0.65 without an outline (`12`); B, dimming of 0.45, as in cropping in Telegram's editor (`TGPhotoCropView`), plus a 1 pt white outline at 0.7 along the rounded contour, without corners (`13`). In B the outline width is recomputed for the current zoom (`scrollViewDidZoom`) so that it is always 1 pt on screen. Nika's choice; the code currently has B.
-Fragment size: Nika chose the largest, 8 line heights (variant 4).
+**D-020. Keep a placeholder when the original is deleted (Nika).** Replaced by D-022.
 
-### D-017. Following a quote centres the region on screen (Nika's decision, 2026-10-13, overridden by D-028)
-Previously `zoom(to:)` ran into the edge of the photo, and a region at the edge stayed above the centre. Now the zoom and offset are computed manually, and the missing room at the edge is added as the scroll view's `contentInset`; the inset is removed with an animation as soon as the user starts dragging or zooming (`scrollViewWillBeginDragging` / `scrollViewWillBeginZooming`). Screenshot `screenshots/m4/15`.
+**D-021. The photo can be zoomed while a frame is active (Nika).** One finger edits the frame, two fingers zoom and pan the photo, and the frame stays on the same part of it.
 
-### D-018. Data checks on the recipient's side and resetting the thumbnail (2026-10-13)
-As part of continuing M4, the decoder rejects an unknown kind, invalid coordinates and a region outside the photo. For Float32 a tolerance of 0.000001 is allowed at the edge, after which the region is clamped to the image bounds. When a visual reply is turned into an ordinary reply to the same photo, the ordinary thumbnail is restored: previously an unchanged media reference could leave the old crop in place.
-A full debug_sim_arm64 build and 4081 codec checks passed. The UI scenarios and lazy loading are not yet confirmed interactively; see m4-verification.md. Size 8x and variant B are kept, no new UX decisions were made, M4 is not closed.
+**D-022. If the original is deleted, the header disappears, as for any reply to a deleted message (Nika).** Same logic as the rest of the app, and no flicker while history loads.
 
-### D-019. Variant B approved by Nika (2026-10-13)
-Nika chose variant B for viewing a quote: dimming of 0.45 around the region and a thin white 1 pt outline at 0.7 opacity, without corners. The highlight stays while viewing and follows zooming and moving the photo. This closes the contrast choice from the note on D-016; the code and the installed builds already use this variant. The M4 interactive checks remain open; approving the look does not mean they have passed.
+**D-023. The invisible marker goes first in the text, not last.** At the end it made the whole line look underlined in themes where links and text share a colour.
 
-### D-020. Quote context is kept when the original is unavailable (2026-10-13, overridden by D-022)
-After the deletion test, Nika noted that the whole quote block disappearing makes the reply unclear, and agreed to continue with a compact placeholder. A visual reply keeps the quote bar and background with the localized strings "Photo" / "Message doesn't exist". The image is not stored separately. The wording covers any unavailable original, since the client does not always know why it is missing. Checked after a restart in the light and dark themes; a tap shows the standard explanation.
+**D-024. Editing a visual reply keeps the region.** Our client takes the marker out of the editor and puts it back on save. In stock Telegram an edit can still move or drop it; this is listed in the README as a transport limit.
 
-### D-021. Zoom with an active selection (Nika's refinement, 2026-10-13)
-Nika asked to be able to zoom out of the photo while keeping the region active. This changes the restriction from D-011: one finger adjusts the frame, two fingers zoom and move the photo. The frame stores its coordinates relative to the original and follows the change of view. After the frame closes, the regular one-finger control is restored.
-Checked in the simulator on 2026-10-13: pinching both ways and moving with two fingers move the photo, the frame stays on the same cells, one finger moves the frame, Reply gives the same fragment (`screenshots/m4/20`–`25`).
+**D-025. Replying works for a photo opened outside the loaded chat history**, for example from the profile's media or from search. The region used to get lost there.
 
-### D-022. Deleted original: the header disappears, as everywhere in Telegram (Nika's decision, 2026-10-13, overrides D-020)
-The "Photo / Message doesn't exist" placeholder is removed. If the original message is unavailable, a visual reply behaves like any reply to a deleted message: the header is not drawn and the bubble stays plain text. Reason: the same logic as everywhere else in the app, and the placeholder would flicker while history loads. Activation through VoiceOver does nothing in this case (as for an ordinary message without a link).
+**D-026. The header is built like a text quote's (Nika):** the sender's name, the quote icon, and the fragment where the quoted text would be, with no "Photo" line. A narrow strip is shown whole, and a wide fragment takes the full width of the header, like a long text quote.
 
-### D-023. The transport marker goes at the start of the text, not at the end (2026-10-13)
-Why the whole text of a visual reply was underlined in the dark theme: Telegram underlines links when the link colour equals the text colour (`stringWithAppliedEntities`, `underlineAllLinks`), and CoreText drops a trailing U+200B from the line's glyphs and returns 0 for its index from `CTLineGetOffsetForStringIndex`. `InteractiveTextComponent` builds the underline rectangle from that zero position to the end of the line. Checked with a separate program on macOS: for a leading marker both positions are 0, an underline of zero width. So `VisualQuoteTransport.attach` now puts the marker first and shifts the other entities by its length; old messages with a trailing marker are still read. The rendering filter `visibleEntities` in our client stays as a second safeguard. Confirmed by Nika in regular Telegram on a phone in the dark theme: the text is clean.
-Side effect of editing (checked): the region survives editing the text, but the editor (`refreshTextUrls`) extends the link onto the neighbouring word, and after saving that word looks like a link. Whether to strip the marker during editing in our client is Nika's call.
+**D-027. Opening a quote works even when the original is far back in the chat history.**
 
-### D-024. Editing a visual reply: the marker is cut out of the editor and restored on save (2026-10-13)
-After editing, Nika got an ordinary reply without a fragment. Telegram's composer is not designed for a link on an invisible character: `refreshTextUrls` extends it onto the neighbouring word, and any edit at the start of the text, or replacing the whole text, erases the marker together with the region. So in our client, on entering Edit mode, the marker and its entity are removed from the text (`VisualQuoteTransport.detach`, at both entry points into editing in `ChatControllerLoadDisplayNode`), and on save the region is taken again from the original message and attached to the new text by the same `attach` as when sending; the link preview is disabled. This works for old messages with a trailing marker too. In regular Telegram, editing such a message can still shift or lose the region: this is a transport limitation, recorded in the README.
+**D-028. Zooming to the region stops at the photo's edge and shows no empty space (Nika).** Replaces D-017.
 
-### D-025. The region was lost if the original photo was not in the loaded chat history (2026-10-13)
-Nika got a reply without a fragment after selecting on a photo from an album. The cause is not the album. On returning from the gallery, the chat looks for the original message. If it is in the loaded history window, the region is passed into the reply panel; if not (the photo was opened from the profile's Media tab or from search, or the chat reloaded the window in the meantime), the history-search branch in `ChatControllerNavigateToMessage` runs, and there `setupReply` was called without a `subject`, so the reply came out ordinary. Now the region is passed in this branch too. Reproduced on the old build through the profile's Media tab (`screenshots/m4/29`); after the fix the fragment is in place (`30`). Separately checked that album photos opened from the chat itself worked before as well.
+**D-029. A region at the photo's edge never hides under the gallery's controls (Nika).** The photo shifts just enough to show it between them, and the shift goes away as soon as the user moves the photo.
 
-### D-026. The header of a visual quote is built like the header of a text quote (Nika's decision, 2026-10-13)
-Reference: a reply with a text quote in Telegram shows the author's name, the quote icon in the top right corner and the piece of text itself; there is no word "Text". So the visual reply's header is now the same: the name on top, the quote icon (`Chat/Message/ReplyQuoteIcon`, as for `isQuote`), and below it the fragment instead of a line of text. The "Photo" line is removed. The fragment sits under the name with the same inset as the text line and is aligned to the bar. Size: the long side keeps the earlier 8 line heights; the short side follows the region's proportions but is no less than a quarter of that; if the proportions do not fit this minimum, the fragment is fitted whole and the rest is filled with the placeholder colour. So a narrow strip is visible edge to edge, and square fragments do not change. Checked in the dark and light themes, screenshots `screenshots/m4/31`–`33`.
+**D-030. The reply panel shows the whole fragment, not a square crop (Nika).** Very thin fragments get their own rounded corners.
 
-### Note on D-026 (2026-10-13, evening). Dark corners on the thumbnail and the gap under the name
-Nika noticed dark "folded" corners on the fragment. Cause: the placeholder colour (`mediaPlaceholderColor`) is semi-transparent, and the standard `addCorners`, when applying the corner mask, multiplies an already premultiplied colour by alpha once more, so semi-transparent pixels in the corners darken; on ordinary thumbnails this is invisible because there is an opaque photo under the corners. The crop generator now clips the drawing to the rounded contour (`clip`) and does not call `addCorners`. The gap between the name and the fragment is increased to 4 pt (previously the fragment started at the visual edge of the name line). Screenshots `screenshots/m4/34`, `35`.
+**D-031. The reply panel says "Reply to Quote from <name>", as for a text quote (Nika).** No new strings were needed. The title gets truncated in the narrow panel; Nika kept it that way rather than shrink the fragment.
 
-### D-027. Following a quote works even when the original is not in the loaded history (2026-10-13)
-Nika: tapping a quote on a photo from July opened not the gallery with the region but an ordinary jump to the message. Cause: the `openMessage` handler in `ChatController` takes the message only from the loaded history window and returns `false` if it is not there; the bubble then did an ordinary `navigateToMessage`. For a visual quote the gallery opens in single-message mode anyway (D-015), so now with `mediaSubject == .visualQuoteRegion` a copy of the original message from the reply header is enough. A relative of D-025: the same dependency on the history window, only on the opening path.
+## Polish (2026-10-13)
 
-### Note on D-026 (2026-10-13). A horizontal fragment takes the header's width
-Nika asked why a narrow strip does not stretch to the bubble's width. The long side was fixed at eight line heights. Now, for fragments wider than they are tall, the width grows to the available header width (`constrainedSize.width` minus insets); the height stays no more than the earlier side and no less than a quarter of it. Vertical and square fragments are unchanged. Analogy: a long text quote also takes the full width of the bubble.
+**D-032. VoiceOver labels for the Reply button and the selection frame.** "Selected area" is the prototype's only new string; other languages fall back to English.
 
-### D-028. Centring through the scroll inset is removed (Nika's decision, 2026-10-13, overrides D-017)
-For a region at the edge of the photo, centring added a scroll inset, and a black field appeared beyond the edge of the photo. Nika found it odd. The gallery again zooms with the standard `zoom(to:)`: the region is placed as close to the middle as possible, but the screen stops at the edge of the photo and shows no empty space. The dimming and the outline around the region are unchanged.
-
-### D-029. A region at the edge of the photo does not go under the gallery controls (Nika's decision, 2026-10-13)
-After D-028, a region at the top or bottom edge of the photo ended up, after zooming, under the gallery's top controls ("back", title, "…") or under the bottom panel. The same happened with a tall strip. Now the photo, as before, zooms as close to the centre as possible, but if the region still falls under the controls, the gallery shifts the photo vertically exactly enough for the region to sit between them with an 8 pt gap. The missing room is added as the scroll view's `contentInset`, so the dark band appears only under the controls themselves. A tall strip that does not fit between the controls is zoomed slightly less. The inset is removed with an animation as soon as the user moves or zooms the photo (`scrollViewWillBeginDragging` / `scrollViewWillBeginZooming`), and is reset when the screen size changes. Regions in the middle of the photo and at its side edges behave as in D-028. Reason: the quote should be visible whole right away, and Nika did not want the big black field of D-017. Screenshots: before, `screenshots/m4/46`, `48`, `51`; after, `53`, `54`, `56`; after dragging down and back up to the stop, the photo reaches the bottom of the screen and there is no band, so the inset is removed: `55`, `57`.
-
-### D-030. The reply panel thumbnail fits the whole fragment; a fitted fragment has its own rounded corners (Nika's decision, 2026-10-13)
-The reply panel above the input field (a 36×36 square, D-013) used to crop the fragment to a square, and for a narrow strip only a piece from its middle was visible. Now the fragment is fitted into the square whole, as in the bubble header (D-026). The free part of the square is filled with the panel's placeholder colour (`inputPanel.primaryTextColor` at 0.1 opacity, like the placeholders of the neighbouring text). `VisualQuoteCropView` became a container with the image inside.
-Nika noticed that a very narrow strip in the bubble had no rounded corners. Cause: per D-026 such a strip is fitted into a box with margins in the placeholder colour, and only the outer edge of the box was rounded, while the image inside kept sharp corners. On a light background the margins are almost invisible, so it looked as if there was no rounding at all. Now the fitted fragment is rounded itself: the radius is the same as the thumbnail's (4 pt in the bubble, 6 pt in the panel), but no more than half the short side, so a very thin strip in the panel looks like a pill. If the fragment fills the box entirely, nothing changes. Screenshots: `screenshots/m4/58` (bubble), `59` (panel).
-
-### D-031. The reply panel for a visual quote is titled like a reply to a text quote (Nika's remark, 2026-10-13)
-Nika noticed that for a text quote the panel above the input field says "Reply to Quote from …", while for a visual one it said just "Reply to …". Now the visual quote uses the same string, `Chat_ReplyPanel_ReplyToQuoteBy`, in a regular chat and in a channel. There are no new strings; the translations already exist in all language packs. The second line stays "Photo" next to the fragment, as for a reply to a photo. This makes the panel consistent with the bubble header (D-026), where a visual quote also has the quote icon. Screenshot `screenshots/m4/60`.
-Side effect: the 36 pt thumbnail takes width from the title, and in the narrow iOS 26 panel even a short name is truncated ("Reply to Quote from…"). Nika chose to leave it as it is (variant A of three; rejected: a small thumbnail in the second line before "Photo", and going back to the "Reply to …" title).
-
-## M5 — Polish (2026-10-13)
-
-### D-032. VoiceOver for the Reply button and the selection frame in the gallery (2026-10-13)
-The Reply button is built from `GlassControlGroupComponent`, which draws its label as an image, so VoiceOver could not read it: the accessibility tree had an unnamed button. Now `VisualQuoteReplyButtonNode` is itself an accessibility element with the button trait. Its label comes from the same string as on screen (`Conversation_ContextMenuReply`), and activation calls the same action. The selection frame is labelled with a new string, `VisualQuote.VoiceOver.SelectedArea` = "Selected area". This is the prototype's only new string: `Localizable.strings` has no suitable existing one, and other languages fall back to English (see code-map, section 3). Checked with a snapshot of the accessibility tree in the simulator: the button is listed as `button "Reply"`.
-
-### D-033. The gallery frame colours are set in code rather than taken from the theme (Nika's decision, 2026-10-13)
-The dimming around the region (black, 0.4 while selecting and 0.45 while viewing), the white outline at 0.7 and the white frame corners are constants in `VisualQuoteFrameNode`, not values from `PresentationTheme`. This is an exception to the brief's rule "colours only from the theme". Reason: Telegram's gallery is always dark (`defaultDarkColorPresentationTheme`, `GalleryController.swift`) and does not depend on the chat theme, and the closest analogue, the crop frame in Telegram's photo editor (`TGPhotoCropView`), sets the same colours the same way. The colours around the fragment in the bubble and in the reply panel come from the theme (`mediaPlaceholderColor`, `inputPanel.primaryTextColor`).
-
-### Note on D-031 (2026-10-13, after M5). Thumbnail in the panel's second line: declined
-Nika looked at a mockup (a picture over a screenshot, without a build; `screenshots/m5/05`). B: a small fragment instead of "Photo". C: the fragment and "Photo", as in the chat list. In both the title fits entirely, but the fragment shrinks from 36 to 18 pt. Nika left it as it is: a 36 pt fragment on the left, the title truncated.
+**D-033. The gallery frame uses fixed colours rather than theme colours (Nika).** The gallery is always dark, and Telegram's crop editor does the same.
 
 ## Review before publication (2026-10-13)
 
-### D-034. The region leaves the reply subject in one place for every send path (review, 2026-10-13)
-A review of the branch diff found that the region marker was added only in `sendCurrentMessage` for text fragments, while the other ~30 send paths (sticker, photo with a caption, voice message, dice, inline bot result) passed `innerSubject = .pollOption(bytes)` to the server, which silently drops it (D-012): the panel showed a fragment, but an ordinary reply went out. Now the region is moved into the text in `ChatControllerImpl.transformEnqueueMessages`, which every send goes through: the first message with text (a text or a media caption) that has room for the marker gets it, and all messages go out with an ordinary reply subject. Stickers, media without a caption, dice and rich messages become ordinary replies to the photo; inline results have the region removed explicitly (`withoutRegion`). This is recorded in the README as a transport limitation.
-Also there: `breakChatInputText` cuts text at exactly 4096, and the marker added a character over the limit; now `VisualQuoteTransport.chunks(of:)` leaves room for the marker in the first chunk, and the editor's limit is reduced by the marker's length. Editing no longer removes the link preview if the user kept it. The codec checks cover the transformation of outgoing messages and the splitting (4108 checks).
-Cloud draft (a check prompted by the review): in Saved Messages, a draft with a region typed on one simulator did not appear on the second, but an ordinary reply draft ("Reply to Nika", without a region) did not arrive there either: drafts of this chat do not sync between devices, so the check says nothing about the transport. A check in a regular private chat needs a second account and is postponed together with it; the limitation is recorded in the README.
-Other review fixes: region selection is unavailable for photos in chats that restrict copying (the fragment in the reply panel was not protected from screenshots) and in chats where the user cannot write (the Reply button was shown but did nothing); the passive highlight is not laid over a selection already in progress and is reset when the photo changes; the detector is prepared again when the account changes and does not hold on to the first context; the fragment generator decodes the photo once per signal update rather than on every relayout; the reply panel draws the fragment with the same generator as the bubble (`VisualQuoteCropView` removed); dead thumbnail variants, corner "tails", the unused detector mask and `point(in:)` were removed; the Reply button and the zoom use the same measured height of the gallery panels.
+**D-034. Every way of sending a reply handles the region**, in one place that all sends pass through. A reply without text (a sticker, a voice message, a photo without a caption) goes out as an ordinary reply; this and the other transport limits are in the README. The same review fixed several smaller issues, such as hiding selection in chats that forbid copying.
 
-### D-035. The code is published in Nika's private repository (2026-10-13)
-The repository is `github.com/xntaylerx-lab/Telegram-iOS`, private, with the full Telegram-iOS history (`master` = `f1dd7a2dbd`) and the `visual-quote` branch, which is set as the default branch. It is not a GitHub fork: a private fork of a public repository is impossible, and Nika did not want to show the code early; before submission the repository is switched to public in the settings. The root README got a banner linking to `docs/visual-quote/README.md`. Before the upload the history was checked: no keys, no paths to the config with keys, no debug logs and no personal data.
+**D-035. The code is published in Nika's own GitHub repository**, with Telegram's full history and `visual-quote` as the default branch, after a check for keys and personal data. Private at first, public since 2026-10-16.
 
-## Demo video for the contest (2026-10-15)
+## Demo video (2026-10-15 – 16)
 
-### D-036. Debug touch indicator for recording the demo, only behind the `--show-touches` launch argument (2026-10-15)
-The contest demo video is recorded from the simulator in the style of Telegram's own videos, where every touch is shown as a translucent grey disc. iOS Simulator has no "show touches" setting, and the Mac's screen recording tools do not draw discs on the simulator. So the build draws the disc itself: `Telegram/Telegram-iOS/TouchIndicatorOverlay.swift` plus two lines in `Application.swift`. It is enabled only if the app is launched with the `--show-touches` argument (`xcrun simctl launch <udid> ph.telegra.Telegraph --show-touches`), by analogy with the standard `--ui-test` check in `AppDelegate`; without the argument nothing is created and the app's behaviour does not change. This is not part of the Visual Quote feature and not part of the brief; it is a recording tool.
-How it works: touches are read in `Application.sendEvent(_:)`, which sees the events of all windows, including the system keyboard window (`NativeWindow.sendEvent` from Display would not see them). The discs live in a separate transparent window (`isUserInteractionEnabled = false`, created on the first touch, no effect on hit-testing). One `CALayer` per touch, keyed by `ObjectIdentifier(touch)`. Look: 26 pt diameter, black fill at 0.22, a 1.5 pt white outline at 0.65; it appears by scaling from 0.6 to 1 over 0.12 s, follows the finger without animation while it moves, and on release fades out over 0.2 s while growing to 1.25. The overlay window's root controller mirrors the status bar style and visibility and the orientation of the main window's root controller, because a full-screen window above the main one would otherwise take them over (`TGOverlayControllerWindow` does the same).
-Keyboard: UIKit clamps `windowLevel` to 1e7 (the requested 1e9 became 10000000 in the log; Telegram's own windows with level 1e9, e.g. in `TGModernConversationInputMicButton`, are clamped the same way), and the system keyboard window `UIRemoteKeyboardWindow` sits at 1e7 + 1, above any app window. In the first check a key touch reached `sendEvent`, but the disc ended up under the keyboard. So for windows with a level no lower than the overlay's, the disc is added to the layer of the window that received the touch; checked that it is visible over the key together with the standard enlarged key preview.
-Check on iPhone 17 Pro: a recording with `xcrun simctl io <udid> recordVideo` during a swipe and taps on the chat list, the search field and a key of the search keyboard; frames `screenshots/demo/touch-overlay-list.png`, `touch-overlay-search.png` and `touch-overlay-keyboard.png`. Launching without the argument shows no discs; the status bar does not change after the overlay appears.
-Along the way: the on-screen keyboard did not appear in the simulators because the Mac's hardware keyboard was connected to them (the Simulator.app setting "I/O → Keyboard → Connect Hardware Keyboard"). For recording the demo it is disabled for both simulators (`defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false` plus `DevicePreferences` per UDID; Simulator.app was restarted without shutting down the devices). It can be turned back on with the same checkbox in the Simulator.app menu.
+**D-036. A debug touch indicator for recording the demo**, active only with the `--show-touches` launch argument. It is a recording tool, not part of the feature.
 
-### D-037. The frame picks a corner or a move by the touch-down point, not by where the pan began (Nika's remark, 2026-10-16)
-While recording the demo, a fast gesture from a corner of a small frame moved the whole frame instead of resizing it. Cause: `VisualQuoteFrameNode` chose the mode in the pan gesture's `.began` from `recognizer.location`, and a pan begins only after the finger has passed the recognition threshold; for an 80×80 pt frame the corner zone is a third of a side, about 27 pt, and with a fast movement the finger is already outside it by then. The pan's `translation` is measured from the recognition point, so the touch point cannot be recovered from it. Now the touch point is stored in `gestureRecognizer(_:shouldReceive:)` (the gesture's first touch) and the mode is chosen from it; the frame's movement and size are still computed from `translation`, and behaviour with a slow gesture is unchanged.
-Check on iPhone 17 during `simctl io recordVideo` (the load under which the bug reproduced): a fast gesture from the top left corner resizes the frame, a gesture from the middle moves it, and a fast gesture from the bottom right corner resizes it again. Screenshots in the project folder: before, `screenshots/demo/frame-fast-drag-before.png`; after, `screenshots/demo/frame-fast-drag-after.png`.
+**D-037. A fast drag from a corner resizes the frame instead of moving it.** Found while recording: the gesture now picks a corner or a move by where the finger first touched.
 
-## Publication (2026-10-16)
+## Publication (2026-10-16 – 17)
 
-### Note on D-035 (2026-10-16). The repository is public
-On Nika's go-ahead the repository was switched to public on 2026-10-16. Before that the commits added since the 2026-10-13 check were checked again for keys and personal data; nothing was found.
+**D-038. The repository page opens on Visual Quote, not on Telegram's compilation guide (Nika).** GitHub shows `.github/README.md` first; Telegram's own README stays unchanged.
 
-### D-038. The repository page shows Visual Quote, not Telegram's compilation guide (Nika's decision, 2026-10-16)
-On the public repository's main page GitHub showed Telegram's root `README.md`: the prototype banner was a one-line quote, and the large "Telegram iOS Source Code Compilation Guide" heading under it caught the eye first. Of three options (our own README in `.github/`, rewriting the root one, leaving it as it is) Nika chose the first. GitHub shows a README from `.github/` on the main page ahead of the root one, so `.github/README.md`, with a short description of the feature, a link to the prototype's changes (`compare/master...visual-quote`) and links to the full README and this log, takes over the main page, while Telegram's file does not change. Its links are absolute, so they do not depend on which folder GitHub resolves them against.
+**D-039. The documentation is in English (Nika).** The log and the code map were translated from Russian.
 
-### D-039. The decision log is in English (Nika's decision, 2026-10-16)
-The log was kept in Russian, the project's working language. The repository is public and the submission is read in English, so Nika asked for the log in English. The whole file was translated, entry by entry, without changing the content; new entries are written in English. The Russian original is in git history. `code-map.md` stays in Russian.
+**D-040. The prototype's commits carry no Claude co-author line (Nika).** The branch history was rewritten to remove it. Telegram's own history, which this repository carries, still has such commits.
 
-### Note on D-039 (2026-10-16). `code-map.md` in English too
-At Nika's request `code-map.md` was translated as well, without changing its content. A line at the top marks it as a snapshot from M1, written before implementation, so that its options (section 5) and open questions (section 7) are not read as the current state.
-
-### D-040. The prototype's commits carry no Claude co-author trailer (Nika's decision, 2026-10-17)
-After the repository went public, GitHub listed the `claude` account among its contributors, because every prototype commit ended with a `Co-Authored-By: Claude … <noreply@anthropic.com>` trailer. Nika asked to remove it. The trailer was stripped from all 66 commits of `visual-quote` with `git filter-branch --msg-filter`; trees, authors, dates and the rest of each message are unchanged (checked commit by commit), and the branch was force-pushed. All commit hashes of the branch changed; the one hash this log quotes (D-011) was updated, and hashes quoted in notes outside the repository refer to the old history. New commits are written without the trailer.
-The `claude` account may still appear in Contributors: Telegram's own history, which this repository carries, has 743 commits with the same trailer, and `TelegramMessenger/Telegram-iOS` lists `claude` among its top contributors.
+**D-041. This log is kept short (Nika):** one decision per entry, what and why. The detailed working log, with checks and screenshot references, is in git history.

@@ -156,7 +156,7 @@ Outside the feature, `Telegram/Telegram-iOS/TouchIndicatorOverlay.swift` and two
 
 ## Further reading
 
-- [decisions.md](decisions.md): every decision with its reason, D-001 to D-039.
+- [decisions.md](decisions.md): each decision in brief, with its reason, D-001 to D-041.
 - [code-map.md](code-map.md): how the relevant parts of Telegram-iOS work, written at M1 before implementation.
 - [m4-verification.md](m4-verification.md): what was checked on the recipient's side, with screenshot references.
 - [m5-verification.md](m5-verification.md): the regression check of plain replies and text quotes, VoiceOver, and the clean build.
