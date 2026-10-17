@@ -17,7 +17,7 @@ Only a rectangle is sent. The recipient's client cuts the fragment out of the ph
 
 - [The prototype's changes only](https://github.com/xntaylerx-lab/Telegram-iOS/compare/master...visual-quote), without Telegram's own history.
 - [Full write-up](https://github.com/xntaylerx-lab/Telegram-iOS/blob/visual-quote/docs/visual-quote/README.md): how to build it from scratch, what is real and what is temporary, how the region travels, where the code is.
-- [Decision log](https://github.com/xntaylerx-lab/Telegram-iOS/blob/visual-quote/docs/visual-quote/decisions.md), in Russian.
+- [Decision log](https://github.com/xntaylerx-lab/Telegram-iOS/blob/visual-quote/docs/visual-quote/decisions.md): every decision with its reason.
 
 ## Status
 
